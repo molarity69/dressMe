@@ -10,11 +10,19 @@ public class GameManager : MonoBehaviour
     [Header("Levels")]
     [SerializeField] private List<HotspotSequenceData> _levels = new List<HotspotSequenceData>();
 
+    [Header("UI References")]
+    [SerializeField] private GameObject _mainSceneUI;
+
     private GameState _currentState = GameState.MainMenu;
     private int _currentLevelIndex = 0;
     private readonly List<HotspotID> _clickedHotspots = new List<HotspotID>();
 
     private void Start()
+    {
+        TransitionToState(GameState.MainMenu);
+    }
+
+    public void PlayGameButton()
     {
         TransitionToState(GameState.PointAndClick);
     }
@@ -75,10 +83,20 @@ public class GameManager : MonoBehaviour
 
         switch (_currentState)
         {
-            case GameState.MainMenu: OnEnterMainMenu(); break;
-            case GameState.PointAndClick: OnEnterPointAndClick(); break;
-            case GameState.MiniGame: OnEnterMiniGame(); break;
-            case GameState.Narrative: OnEnterNarrative(); break;
+            case GameState.MainMenu:
+                _mainSceneUI.SetActive(true);
+                OnEnterMainMenu(); 
+                break;
+            case GameState.PointAndClick:
+                _mainSceneUI.SetActive(false);
+                OnEnterPointAndClick(); 
+                break;
+            case GameState.MiniGame: 
+                OnEnterMiniGame(); 
+                break;
+            case GameState.Narrative: 
+                OnEnterNarrative(); 
+                break;
         }
 
         Debug.Log("Cuurent State: " + _currentState);
