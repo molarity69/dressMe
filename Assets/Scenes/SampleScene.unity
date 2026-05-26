@@ -153,7 +153,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _gameStateEvent: {fileID: 11400000, guid: df7a31ad30de27640b92a19846415df9, type: 2}
-  _levels: []
+  _levels:
+  - {fileID: 11400000, guid: 29260a11c1c2cc640b505eae2d1ae15a, type: 2}
 --- !u!4 &518617518
 Transform:
   m_ObjectHideFlags: 0
@@ -367,7 +368,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 1114970244}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c49b4cc203aa6414fae5c798d1d0e7d6, type: 3}
+  m_Script: {fileID: 11500000, guid: 56666c5a40171f54783dd416a44f42bf, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   m_EventMask:
