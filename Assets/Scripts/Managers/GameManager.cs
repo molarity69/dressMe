@@ -7,11 +7,12 @@ public class GameManager : MonoBehaviour
     [Header("Events")]
     [SerializeField] private GameStateEvent _gameStateEvent;
 
-    [Header("Levels")]
-    [SerializeField] private List<HotspotSequenceData> _levels = new List<HotspotSequenceData>();
+    [Header("Main Menu")]
+    [SerializeField] private GameObject _mainMenuObject;
 
-    [Header("UI References")]
-    [SerializeField] private GameObject _mainSceneUI;
+    [Header("Levels")]
+    [SerializeField] private List<LevelData> _levels = new List<LevelData>();
+    [SerializeField] private List<GameObject> _miniGames = new List<GameObject>();
 
     private GameState _currentState = GameState.MainMenu;
     private int _currentLevelIndex = 0;
@@ -19,18 +20,20 @@ public class GameManager : MonoBehaviour
 
     private void Start()
     {
+        DeactivateAllMiniGames();
         TransitionToState(GameState.MainMenu);
     }
 
-    public void PlayGameButton()
+    public void OnPlayPressed()
     {
+        if (_mainMenuObject != null)
+            _mainMenuObject.SetActive(false);
+
         TransitionToState(GameState.PointAndClick);
     }
 
     public void OnHotspotClicked(int hotspotIDValue)
     {
-
-        Debug.Log("Hotspot clicked: " + hotspotIDValue);
         if (_currentState != GameState.PointAndClick)
             return;
 
@@ -40,7 +43,7 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        HotspotSequenceData currentLevel = _levels[_currentLevelIndex];
+        LevelData currentLevel = _levels[_currentLevelIndex];
         HotspotID clickedID = (HotspotID)hotspotIDValue;
 
         if (!currentLevel.RequiredHotspots.Contains(clickedID))
@@ -63,7 +66,6 @@ public class GameManager : MonoBehaviour
         if (_clickedHotspots.Count >= currentLevel.RequiredHotspots.Count)
         {
             _clickedHotspots.Clear();
-            _currentLevelIndex++;
             TransitionToState(currentLevel.TargetState);
         }
     }
@@ -73,42 +75,73 @@ public class GameManager : MonoBehaviour
         GameState previousState = _currentState;
         _currentState = newState;
 
-        if (_gameStateEvent == null)
-        {
+        if (_gameStateEvent != null)
+            _gameStateEvent.Raise(new GameStateData(_currentState, previousState));
+        else
             Debug.LogWarning("GameManager has no GameStateEvent assigned.");
-            return;
-        }
-
-        _gameStateEvent.Raise(new GameStateData(_currentState, previousState));
 
         switch (_currentState)
         {
-            case GameState.MainMenu:
-                _mainSceneUI.SetActive(true);
-                OnEnterMainMenu(); 
-                break;
-            case GameState.PointAndClick:
-                _mainSceneUI.SetActive(false);
-                OnEnterPointAndClick(); 
-                break;
-            case GameState.MiniGame: 
-                OnEnterMiniGame(); 
-                break;
-            case GameState.Narrative: 
-                OnEnterNarrative(); 
-                break;
+            case GameState.MainMenu: OnEnterMainMenu(); break;
+            case GameState.PointAndClick: OnEnterPointAndClick(); break;
+            case GameState.MiniGame: OnEnterMiniGame(); break;
+            case GameState.Narrative: OnEnterNarrative(); break;
         }
-
-        Debug.Log("Cuurent State: " + _currentState);
     }
 
-    private void OnEnterMainMenu() { }
-    private void OnEnterPointAndClick() { }
-    private void OnEnterMiniGame() { }
-    private void OnEnterNarrative() { }
+    private void OnEnterMainMenu()
+    {
+        if (_mainMenuObject != null)
+            _mainMenuObject.SetActive(true);
+    }
+
+    private void OnEnterPointAndClick()
+    {
+        DeactivateAllMiniGames();
+    }
+
+    private void OnEnterMiniGame()
+    {
+        DeactivateAllMiniGames();
+        ActivateMiniGame(_currentLevelIndex);
+    }
+
+    private void OnEnterNarrative()
+    {
+        DeactivateAllMiniGames();
+        _currentLevelIndex++;
+    }
+
+    private void ActivateMiniGame(int index)
+    {
+        if (index >= _miniGames.Count) return;
+        if (_miniGames[index] == null)
+        {
+            Debug.LogWarning($"GameManager: No mini-game assigned at index {index}.");
+            return;
+        }
+
+        _miniGames[index].SetActive(true);
+    }
+
+    private void DeactivateAllMiniGames()
+    {
+        foreach (GameObject miniGame in _miniGames)
+        {
+            if (miniGame != null)
+                miniGame.SetActive(false);
+        }
+    }
 
     public void GoToPointAndClick() => TransitionToState(GameState.PointAndClick);
     public void GoToMiniGame() => TransitionToState(GameState.MiniGame);
     public void GoToNarrative() => TransitionToState(GameState.Narrative);
     public void GoToMainMenu() => TransitionToState(GameState.MainMenu);
+
+    public void ResetLevels()
+    {
+        DeactivateAllMiniGames();
+        _currentLevelIndex = 0;
+        _clickedHotspots.Clear();
+    }
 }
