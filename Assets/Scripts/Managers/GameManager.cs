@@ -16,7 +16,7 @@ public class GameManager : MonoBehaviour
 
     private void Start()
     {
-        TransitionToState(GameState.MainMenu);
+        TransitionToState(GameState.PointAndClick);
     }
 
     public void OnHotspotClicked(int hotspotIDValue)
@@ -80,6 +80,8 @@ public class GameManager : MonoBehaviour
             case GameState.MiniGame: OnEnterMiniGame(); break;
             case GameState.Narrative: OnEnterNarrative(); break;
         }
+
+        Debug.Log("Cuurent State: " + _currentState);
     }
 
     private void OnEnterMainMenu() { }
