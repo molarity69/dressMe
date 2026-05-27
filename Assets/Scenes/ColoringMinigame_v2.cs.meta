@@ -4,8 +4,14 @@ MonoImporter:
   externalObjects: {}
   serializedVersion: 2
   defaultReferences:
-  - _sketchTexture: {fileID: 2800000, guid: 64f79dea46bc5b74086fc97da1c45627, type: 3}
-  - _maskTexture: {fileID: 2800000, guid: 2c9e968e9e87ff9439bd098448a2c967, type: 3}
+  - _injectedCanvas: {instanceID: 0}
+  - _injectedPaintingDisplay: {instanceID: 0}
+  - _injectedSketchDisplay: {instanceID: 0}
+  - _injectedPanelRect: {instanceID: 0}
+  - _sketchTexture: {instanceID: 0}
+  - _maskTexture: {instanceID: 0}
+  - _paperMaskTexture: {instanceID: 0}
+  - _markerCursorSprite: {instanceID: 0}
   executionOrder: 0
   icon: {instanceID: 0}
   userData: 

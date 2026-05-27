@@ -204,6 +204,15 @@ public class ColoringMinigame_v2 : MonoBehaviour
     [Tooltip("Seconds between canvas progress samples. Never sample every frame.")]
     [SerializeField] private float _progressSampleInterval = 0.4f;
 
+    [Header("Audio")]
+    [Tooltip("Injected AudioManager. Provides the loop SFX channel for drawing sound.")]
+    [SerializeField] private AudioManager _audioManager;
+
+    [Tooltip("Sound that plays while LMB is held and painting.")]
+    [SerializeField] private AudioClip _drawingSound;
+
+
+
     [Header("Debug UI")]
     [SerializeField] private bool _showProgressOnScreen = true;
 
@@ -339,6 +348,10 @@ public class ColoringMinigame_v2 : MonoBehaviour
 
         if (_showProgressOnScreen)
             BuildDebugText();
+
+        // Add to the existing null check group — not a hard stop, just a warning
+        if (_audioManager == null)
+            Debug.LogWarning("[ColoringMinigame] _audioManager not assigned — drawing audio disabled.");
 
         // ── Resolve mask texture ─────────────────────────────────────────────────
         // WHY: If the designer supplies a hand-painted mask we use it directly.
@@ -711,28 +724,36 @@ public class ColoringMinigame_v2 : MonoBehaviour
 
     private void HandlePaintingInput()
     {
-        // WHY: Block new strokes while failed or complete. Without this, a held LMB
-        //      during the 1.5s fail countdown re-dirties the canvas before
-        //      ResetCanvas() fires, immediately re-triggering the fail condition.
         if (Input.GetMouseButtonDown(0) && !_isComplete && !_hasFailed)
         {
             _isPainting = true;
             _distanceTraveledThisStroke = 0f;
             _lastEffectiveCursorPos = _effectiveCursorPos;
             _effectivePosInitialised = true;
-            // WHY: Fresh grace period every new stroke — rewards re-entering the edge
-            //      zone after retreating to the middle.
             ResetImpulseState();
+
+            // WHY: PlayLoop on MouseDown, not every frame. One call starts the loop;
+            //      the AudioSource holds it until we explicitly stop it.
+            //      Guard against missing clip so a missing asset doesn't throw.
+            if (_audioManager != null && _drawingSound != null)
+                _audioManager.PlayLoop(_drawingSound);
         }
 
         if (Input.GetMouseButtonUp(0))
         {
             _isPainting = false;
             ResetImpulseState();
+
+            // WHY: Stop() is instant. Pause() would resume mid-clip on next MouseDown
+            //      which sounds like a stutter. Drawing always starts fresh.
+            if (_audioManager != null)
+                _audioManager.StopLoop();
+
             if (_canvasTexture != null)
                 _canvasTexture.Apply();
         }
     }
+
 
     // WHY: CancelInvoke is critical. Without it, pressing R during the auto-reset
     //      countdown fires ResetCanvas() a second time, clearing a canvas the player
@@ -1316,14 +1337,15 @@ public class ColoringMinigame_v2 : MonoBehaviour
 
     private void OnFail()
     {
-        // WHY: Force _isPainting false immediately. Without this, a held LMB during
-        //      the 1.5s countdown keeps stamping paint through UpdateEffectiveCursorPos,
-        //      re-dirtying the canvas before ResetCanvas() fires and instantly
-        //      re-triggering the fail condition on the next SampleProgress() call.
         _isPainting = false;
+
+        if (_audioManager != null)
+            _audioManager.StopLoop();
+
         Debug.Log("[ColoringMinigame] ❌ Failed. Auto-resetting in 1.5s. Press R to reset now.");
         Invoke(nameof(ResetCanvas), 1.5f);
     }
+
 
     private void ResetCanvas()
     {
