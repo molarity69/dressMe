@@ -70,7 +70,7 @@ MonoBehaviour:
   _referenceResolution: 4096
   _markerCursorSprite: {fileID: 21300000, guid: 2de9220626211af448b1648dd014d38e, type: 3}
   _markerCursorPivot: {x: 0, y: 1}
-  _markerCursorSize: {x: 399, y: 380}
+  _markerCursorSize: {x: 50, y: 50}
   _availableColors:
   - {r: 1, g: 0.15, b: 0.15, a: 1}
   - {r: 0.15, g: 0.6, b: 0.15, a: 1}
@@ -95,6 +95,8 @@ MonoBehaviour:
   _completionThreshold: 0.85
   _outOfBoundsFailThreshold: 0.2
   _progressSampleInterval: 0.4
+  _audioManager: {fileID: 0}
+  _drawingSound: {fileID: 0}
   _showProgressOnScreen: 1
 --- !u!1 &4995027136300517454
 GameObject:
