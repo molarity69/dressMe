@@ -14,6 +14,8 @@ public class GameManager : MonoBehaviour
     [SerializeField] private List<LevelData> _levels = new List<LevelData>();
     [SerializeField] private List<GameObject> _miniGames = new List<GameObject>();
 
+    [SerializeField] private MainMenuAnimator _animator;
+
     private GameState _currentState = GameState.MainMenu;
     private int _currentLevelIndex = 0;
     private readonly List<HotspotID> _clickedHotspots = new List<HotspotID>();
@@ -26,9 +28,17 @@ public class GameManager : MonoBehaviour
 
     public void OnPlayPressed()
     {
-        if (_mainMenuObject != null)
-            _mainMenuObject.SetActive(false);
+        //if (_mainMenuObject != null)
+        //    _mainMenuObject.SetActive(false);
 
+        _animator.Play(DisableMainMenu);
+
+        
+    }
+
+    private void DisableMainMenu()
+    {
+        _mainMenuObject.SetActive(false);
         TransitionToState(GameState.PointAndClick);
     }
 
