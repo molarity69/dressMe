@@ -12,6 +12,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2445fcecd9421b94082f45fd5d1aaf1b, type: 3}
   m_Name: Level 1
   m_EditorClassIdentifier: 
-  _requiredHotspots: 01000000
-  _requireOrder: 1
-  _targetState: 2
+  _requiredHotspots: 01000000040000000200000003000000
+  _requireOrder: 0
+  _targetState: 3

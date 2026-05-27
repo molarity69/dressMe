@@ -4,7 +4,8 @@ using UnityEngine;
 public enum NarrativeCharacter
 {
     MrsSula,
-    Player
+    Player,
+    None
 }
 
 [CreateAssetMenu(fileName = "New Narrative", menuName = "Narrative/Narrative Data")]

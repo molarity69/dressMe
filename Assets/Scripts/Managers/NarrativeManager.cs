@@ -17,7 +17,6 @@ public class NarrativeManager : MonoBehaviour
 
     public void Activate()
     {
-        _currentIndex = 0;
         _isActive = true;
         _isTransitioning = false;
 
@@ -64,6 +63,8 @@ public class NarrativeManager : MonoBehaviour
         {
             _isTransitioning = true;
             _gameManager.GoToState(currentLine.TransitionState);
+            _currentCharacter = NarrativeCharacter.None;
+            _currentIndex++;
             return;
         }
 

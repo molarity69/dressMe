@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using UnityTimer;
 
 public class GameManager : MonoBehaviour
 {
@@ -19,6 +20,8 @@ public class GameManager : MonoBehaviour
     [SerializeField] private AudioManager _audioManager;
     [SerializeField] private AudioClip _mainMenuMusic;
     [SerializeField] private AudioClip _citySounds;
+
+    [SerializeField] private GameObject _prepareDay2Image;
 
     private GameState _currentState = GameState.MainMenu;
     private int _currentLevelIndex = 0;
@@ -105,8 +108,9 @@ public class GameManager : MonoBehaviour
         {
             case GameState.MainMenu: OnEnterMainMenu(); break;
             case GameState.PointAndClick: OnEnterPointAndClick(); break;
-            case GameState.MiniGame: OnEnterMiniGame(); break;
+            case GameState.MiniGameColoring: OnEnterMiniGame(); break;
             case GameState.Narrative: OnEnterNarrative(); break;
+            case GameState.PrepareDay2: PrepareDay2(); break;
         }
 
         Debug.Log("Current State: " + _currentState);
@@ -134,7 +138,68 @@ public class GameManager : MonoBehaviour
     private void OnEnterNarrative()
     {
         DeactivateAllMiniGames();
+    }
+
+    private void PrepareDay2()
+    {
+        _prepareDay2Image.SetActive(true);
+        _audioManager.FadeInBGM(3.0f);
+        FadeInHoldFadeOut(_prepareDay2Image.GetComponent<SpriteRenderer>(), 3.0f, 2.0f);
         _currentLevelIndex++;
+    }
+
+    private void FadeInHoldFadeOut(SpriteRenderer sprite, float fadeDuration, float holdDuration)
+    {
+        FadeIn(sprite, fadeDuration);
+        Timer.Register(fadeDuration, onComplete: () =>
+        {
+            Timer.Register(holdDuration, onComplete: () =>
+            {
+                _audioManager.FadeOutBGM(3.0f);
+                FadeOut(sprite, fadeDuration);
+            });
+        });
+    }
+
+    private void FadeIn(SpriteRenderer sprite, float duration)
+    {
+        Color color = sprite.color;
+        color.a = 0f;
+        sprite.color = color;
+
+        Timer.Register(duration, onComplete: () =>
+        {
+            color.a = 1f;
+            sprite.color = color;
+        },
+        onUpdate: t =>
+        {
+            color.a = Mathf.Lerp(0f, 1f, t / duration);
+            sprite.color = color;
+        },
+        isLooped: false,
+        useRealTime: false);
+    }
+
+    private void FadeOut(SpriteRenderer sprite, float duration)
+    {
+        Color color = sprite.color;
+
+        Timer.Register(duration, onComplete: () =>
+        {
+            color.a = 0f;
+            sprite.color = color;
+            _prepareDay2Image.SetActive(false);
+            GoToNarrative();
+
+        },
+        onUpdate: t =>
+        {
+            color.a = Mathf.Lerp(1f, 0f, t / duration);
+            sprite.color = color;
+        },
+        isLooped: false,
+        useRealTime: false);
     }
 
     private void ActivateMiniGame(int index)
@@ -159,7 +224,7 @@ public class GameManager : MonoBehaviour
     }
 
     public void GoToPointAndClick() => TransitionToState(GameState.PointAndClick);
-    public void GoToMiniGame() => TransitionToState(GameState.MiniGame);
+    public void GoToMiniGame() => TransitionToState(GameState.MiniGameColoring);
     public void GoToNarrative() => TransitionToState(GameState.Narrative);
     public void GoToMainMenu() => TransitionToState(GameState.MainMenu);
     public void GoToState(GameState state) => TransitionToState(state);
@@ -169,5 +234,10 @@ public class GameManager : MonoBehaviour
         DeactivateAllMiniGames();
         _currentLevelIndex = 0;
         _clickedHotspots.Clear();
+    }
+
+    public GameState GetCurrentState()
+    {
+        return _currentState;
     }
 }

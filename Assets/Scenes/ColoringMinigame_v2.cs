@@ -211,7 +211,7 @@ public class ColoringMinigame_v2 : MonoBehaviour
     [Tooltip("Sound that plays while LMB is held and painting.")]
     [SerializeField] private AudioClip _drawingSound;
 
-
+    [SerializeField] private GameManager _gameManager;
 
     [Header("Debug UI")]
     [SerializeField] private bool _showProgressOnScreen = true;
@@ -1333,6 +1333,10 @@ public class ColoringMinigame_v2 : MonoBehaviour
     {
         // Stub: in production → _gameManager.ResolveMinigame(MinigameResult.Success)
         Debug.Log("[ColoringMinigame] 🎉 Transitioning to NarrativeState...");
+        _audioManager.StopLoop();
+        Exit();
+        _gameManager.GoToState(GameState.Narrative);
+
     }
 
     private void OnFail()
@@ -1457,6 +1461,19 @@ public class ColoringMinigame_v2 : MonoBehaviour
 
     public void Exit()
     {
+        if (_cursorGO != null) Destroy(_cursorGO);
+        if (_debugTextGO != null) Destroy(_debugTextGO);
+        if (_canvasTexture != null) Destroy(_canvasTexture);
+        if (_cursorTexture != null) Destroy(_cursorTexture);
+
+        // WHY: _maskTexture may have been created by DeriveMaskFromOutline() at runtime
+        //      (not loaded from disk), in which case it is unmanaged memory we own.
+        //      We tag it with a name in derivation so we can safely identify and destroy it.
+        //      If it was assigned from the Inspector it is a managed asset — Destroy() on
+        //      a managed asset is a no-op at runtime and harmless in-editor.
+        if (_maskTexture != null && _maskTexture.name == "DerivedInteriorMask")
+            Destroy(_maskTexture);
+
         Cursor.visible = true;
         CancelInvoke(nameof(ResetCanvas));
         // WHY: We do not own the Canvas — the scene hierarchy does.

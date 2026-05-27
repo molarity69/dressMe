@@ -5,8 +5,9 @@ public enum HotspotID
 {
     None,
     Window,
-    HotspotB = 2,
-    HotspotC = 3,
+    ClosetUntidy,
+    ClosetTidy,
+    Curtains,
     HotspotD = 4,
     HotspotE = 5
 }
@@ -17,9 +18,14 @@ public class Hotspot : MonoBehaviour, IPointerClickHandler
     [SerializeField] private HotspotID _hotspotID;
     [SerializeField] private IntEvent _hotspotClickedEvent;
     [SerializeField] private Sprite _alternateSprite;
+    [SerializeField] private GameManager _gamemanager;
+    [SerializeField] private GameObject[] _imagesToActivate;
 
     private Sprite _originalSprite;
     private SpriteRenderer _spriteRenderer;
+
+    private bool _spotHit = false;
+
     private void Start()
     {
         _spriteRenderer = GetComponent<SpriteRenderer>();
@@ -27,6 +33,10 @@ public class Hotspot : MonoBehaviour, IPointerClickHandler
     }
     public void OnPointerClick(PointerEventData eventData)
     {
+
+        if (_gamemanager.GetCurrentState() != GameState.PointAndClick || _spotHit)
+            return;
+
         if (_hotspotClickedEvent == null)
         {
             Debug.LogWarning($"Hotspot {_hotspotID} has no IntEvent assigned.");
@@ -44,6 +54,21 @@ public class Hotspot : MonoBehaviour, IPointerClickHandler
                 {
                     _spriteRenderer.sprite = _alternateSprite;
                 }
+                _spotHit = true;
+                break;
+            case HotspotID.Curtains:
+                _spriteRenderer.sprite = null;
+                _imagesToActivate[0].SetActive(true);
+                _spotHit = true;
+                break;
+            case HotspotID.ClosetUntidy:
+                gameObject.SetActive(false);
+                _imagesToActivate[0].SetActive(true);
+                _spotHit = true;
+                break;
+            case HotspotID.ClosetTidy:
+                _spriteRenderer.sprite = _alternateSprite;
+                _spotHit = true;
                 break;
         }
         

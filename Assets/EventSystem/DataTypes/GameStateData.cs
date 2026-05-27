@@ -2,8 +2,10 @@ public enum GameState
 {
     MainMenu,
     PointAndClick,
-    MiniGame,
-    Narrative
+    MiniGameColoring,
+    Narrative,
+    MiniGameZipper,
+    PrepareDay2
 }
 
 public class GameStateData

@@ -48,8 +48,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _gameManager: {fileID: 0}
-  _mrsSulaBox: {fileID: 263483853496305854}
-  _playerBox: {fileID: 610927002208043603}
+  _mrsSulaBox: {fileID: 610927002208043603}
+  _playerBox: {fileID: 263483853496305854}
   _narrativeData: {fileID: 11400000, guid: fca4de4aad71c2c46866f71be7077cc4, type: 2}
 --- !u!114 &2525431363936420289
 MonoBehaviour:
@@ -176,7 +176,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6d1265ef7a8f3c44baa895824e86bc8a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _spriteRenderer: {fileID: 0}
+  _spriteRenderer: {fileID: 6470458408915030749}
   _fadeDuration: 0.3
 --- !u!1 &8227822793694451911
 GameObject:
@@ -275,5 +275,5 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6d1265ef7a8f3c44baa895824e86bc8a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _spriteRenderer: {fileID: 0}
+  _spriteRenderer: {fileID: 592856705352381160}
   _fadeDuration: 0.3

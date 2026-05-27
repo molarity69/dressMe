@@ -302,6 +302,6 @@ public class ZipperPath : MonoBehaviour
 
         Debug.Log("Path end!");
 
-        _gameStateEvent.Raise(new GameStateData(_completionState, GameState.MiniGame));
+        _gameStateEvent.Raise(new GameStateData(_completionState, GameState.Narrative));
     }
 }

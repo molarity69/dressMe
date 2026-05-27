@@ -14,6 +14,7 @@
 
 using System.Collections;
 using UnityEngine;
+using UnityTimer;
 
 public class AudioManager : MonoBehaviour
 {
@@ -48,6 +49,28 @@ public class AudioManager : MonoBehaviour
         if (_bgmSource == null || !_bgmSource.isPlaying) return;
         StopCoroutine(nameof(FadeOutCoroutine)); // WHY: Prevent overlapping fades stacking
         StartCoroutine(FadeOutCoroutine(_bgmSource, duration, stopAfterFade));
+    }
+
+    public void FadeInBGM(float duration)
+    {
+        if (_bgmSource == null || _bgmSource.clip == null) return;
+
+        _bgmSource.volume = 0f;
+        _bgmSource.Play();
+
+        float startVolume = _bgmSource.volume;
+        float targetVolume = 1f;
+
+        Timer.Register(duration, onComplete: () =>
+        {
+            _bgmSource.volume = targetVolume;
+        },
+        onUpdate: t =>
+        {
+            _bgmSource.volume = Mathf.Lerp(0f, targetVolume, t / duration);
+        },
+        isLooped: false,
+        useRealTime: false);
     }
 
     public void StopBGMImmediate()

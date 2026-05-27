@@ -13,6 +13,7 @@ GameObject:
   - component: {fileID: 2352378287795269206}
   - component: {fileID: 3416988590923470991}
   - component: {fileID: -4449210231199672054}
+  - component: {fileID: 1097373353232432903}
   m_Layer: 0
   m_Name: AudioManager
   m_TagString: Untagged
@@ -338,3 +339,31 @@ MonoBehaviour:
   _bgmSource: {fileID: 4861110126435176719}
   _loopSfxSource: {fileID: 2352378287795269206}
   _oneShotSfxSource: {fileID: 3416988590923470991}
+--- !u!114 &1097373353232432903
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6223762010884393150}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f61169ca1d1d0504db70d4d5bed3891b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  gameEvent: {fileID: 11400000, guid: f6434008b4f40c542a37d2abb659c160, type: 2}
+  unityEventResponse:
+    m_PersistentCalls:
+      m_Calls:
+      - m_Target: {fileID: -4449210231199672054}
+        m_TargetAssemblyTypeName: AudioManager, Assembly-CSharp
+        m_MethodName: OnHotspotPressed
+        m_Mode: 0
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2

@@ -19,5 +19,33 @@ MonoBehaviour:
     TransitionState: 0
   - Character: 0
     SpeechSprite: {fileID: 21300000, guid: e7576c7ef2edb94449ca8e876329974d, type: 3}
+    HasTransition: 0
+    TransitionState: 1
+  - Character: 1
+    SpeechSprite: {fileID: 21300000, guid: 53c55e28e9f82624c97b41503f9fae36, type: 3}
+    HasTransition: 1
+    TransitionState: 1
+  - Character: 1
+    SpeechSprite: {fileID: 21300000, guid: aad5ae36b1f4dec458bad89ddf021401, type: 3}
+    HasTransition: 0
+    TransitionState: 1
+  - Character: 0
+    SpeechSprite: {fileID: 21300000, guid: 647590057021d58418faad1ceac31899, type: 3}
+    HasTransition: 1
+    TransitionState: 2
+  - Character: 1
+    SpeechSprite: {fileID: 21300000, guid: b957f5fcaa821f14cbccbf875e3c770c, type: 3}
+    HasTransition: 0
+    TransitionState: 5
+  - Character: 0
+    SpeechSprite: {fileID: 21300000, guid: 647590057021d58418faad1ceac31899, type: 3}
+    HasTransition: 1
+    TransitionState: 5
+  - Character: 1
+    SpeechSprite: {fileID: 21300000, guid: 2ab71b10706b39b4b82495b690c4c9a4, type: 3}
+    HasTransition: 0
+    TransitionState: 5
+  - Character: 0
+    SpeechSprite: {fileID: 21300000, guid: e7576c7ef2edb94449ca8e876329974d, type: 3}
     HasTransition: 1
     TransitionState: 1
