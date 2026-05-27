@@ -9,12 +9,11 @@ public class GameManager : MonoBehaviour
 
     [Header("Main Menu")]
     [SerializeField] private GameObject _mainMenuObject;
+    [SerializeField] private MainMenuAnimator _mainMenuAnimator;
 
     [Header("Levels")]
     [SerializeField] private List<LevelData> _levels = new List<LevelData>();
     [SerializeField] private List<GameObject> _miniGames = new List<GameObject>();
-
-    [SerializeField] private MainMenuAnimator _animator;
 
     private GameState _currentState = GameState.MainMenu;
     private int _currentLevelIndex = 0;
@@ -28,17 +27,21 @@ public class GameManager : MonoBehaviour
 
     public void OnPlayPressed()
     {
-        //if (_mainMenuObject != null)
-        //    _mainMenuObject.SetActive(false);
-
-        _animator.Play(DisableMainMenu);
-
-        
+        if (_mainMenuAnimator != null)
+        {
+            _mainMenuAnimator.Play(OnMainMenuAnimationComplete);
+        }
+        else
+        {
+            OnMainMenuAnimationComplete();
+        }
     }
 
-    private void DisableMainMenu()
+    private void OnMainMenuAnimationComplete()
     {
-        _mainMenuObject.SetActive(false);
+        if (_mainMenuObject != null)
+            _mainMenuObject.SetActive(false);
+
         TransitionToState(GameState.PointAndClick);
     }
 
@@ -55,8 +58,6 @@ public class GameManager : MonoBehaviour
 
         LevelData currentLevel = _levels[_currentLevelIndex];
         HotspotID clickedID = (HotspotID)hotspotIDValue;
-
-        Debug.Log("GameManager HotSpot Clicked " + clickedID);
 
         if (!currentLevel.RequiredHotspots.Contains(clickedID))
             return;
@@ -149,6 +150,7 @@ public class GameManager : MonoBehaviour
     public void GoToMiniGame() => TransitionToState(GameState.MiniGame);
     public void GoToNarrative() => TransitionToState(GameState.Narrative);
     public void GoToMainMenu() => TransitionToState(GameState.MainMenu);
+    public void GoToState(GameState state) => TransitionToState(state);
 
     public void ResetLevels()
     {
