@@ -29,15 +29,13 @@ public class ZipperPath : MonoBehaviour
     private float _totalLength = 0f;
     private List<float> _segmentStartPercentages = new List<float>();
 
-    private GameState _previousState;
-
     private void Awake()
     {
         _lineRenderer = GetComponent<LineRenderer>();
         _mainCamera = Camera.main;
     }
 
-    public void OnEnable()
+    private void Start()
     {
         if (_pathData == null)
         {
@@ -86,7 +84,8 @@ public class ZipperPath : MonoBehaviour
 
         for (int i = 0; i < waypoints.Count; i++)
         {
-            _lineRenderer.SetPosition(i, new Vector3(waypoints[i].x, waypoints[i].y, 0f));
+            Vector3 worldPos = transform.TransformPoint(new Vector3(waypoints[i].x, waypoints[i].y, 0f));
+            _lineRenderer.SetPosition(i, worldPos);
         }
     }
 
@@ -106,16 +105,26 @@ public class ZipperPath : MonoBehaviour
 
         if (Input.GetMouseButtonUp(0))
         {
-            _isDragging = false;
+            if (_isDragging)
+            {
+                _isDragging = false;
+                HandleFailure();
+            }
         }
+    }
+
+    private Vector2 ScreenToLocal(Vector3 screenPosition)
+    {
+        Vector3 worldPosition = _mainCamera.ScreenToWorldPoint(screenPosition);
+        return transform.InverseTransformPoint(worldPosition);
     }
 
     private void TryBeginDrag()
     {
-        Vector2 mouseWorld = _mainCamera.ScreenToWorldPoint(Input.mousePosition);
+        Vector2 mouseLocal = ScreenToLocal(Input.mousePosition);
         Vector2 startPoint = _pathData.Waypoints[0];
 
-        if (Vector2.Distance(mouseWorld, startPoint) <= _pathData.Tolerance)
+        if (Vector2.Distance(mouseLocal, startPoint) <= _pathData.Tolerance)
         {
             _isDragging = true;
         }
@@ -123,10 +132,10 @@ public class ZipperPath : MonoBehaviour
 
     private void ContinueDrag()
     {
-        Vector2 mouseWorld = _mainCamera.ScreenToWorldPoint(Input.mousePosition);
-        Vector2 closestPoint = GetClosestPointOnPath(mouseWorld, out float progressAtClosest);
+        Vector2 mouseLocal = ScreenToLocal(Input.mousePosition);
+        Vector2 closestPoint = GetClosestPointOnPath(mouseLocal, out float progressAtClosest);
 
-        float distanceFromPath = Vector2.Distance(mouseWorld, closestPoint);
+        float distanceFromPath = Vector2.Distance(mouseLocal, closestPoint);
 
         if (distanceFromPath > _pathData.Tolerance)
         {
@@ -149,7 +158,17 @@ public class ZipperPath : MonoBehaviour
         }
     }
 
-    private Vector2 GetClosestPointOnPath(Vector2 point, out float progress)
+    private int GetCurrentSegmentIndex()
+    {
+        for (int i = _segmentStartPercentages.Count - 1; i >= 0; i--)
+        {
+            if (_currentProgress >= _segmentStartPercentages[i])
+                return i;
+        }
+        return 0;
+    }
+
+    private Vector2 GetClosestPointOnPath(Vector2 localPoint, out float progress)
     {
         IReadOnlyList<Vector2> waypoints = _pathData.Waypoints;
 
@@ -157,13 +176,15 @@ public class ZipperPath : MonoBehaviour
         float closestDistance = float.MaxValue;
         float closestProgress = 0f;
 
-        for (int i = 0; i < waypoints.Count - 1; i++)
+        int startSegment = GetCurrentSegmentIndex();
+
+        for (int i = startSegment; i < waypoints.Count - 1; i++)
         {
             Vector2 segmentStart = waypoints[i];
             Vector2 segmentEnd = waypoints[i + 1];
 
-            Vector2 pointOnSegment = GetClosestPointOnSegment(point, segmentStart, segmentEnd);
-            float distance = Vector2.Distance(point, pointOnSegment);
+            Vector2 pointOnSegment = GetClosestPointOnSegment(localPoint, segmentStart, segmentEnd);
+            float distance = Vector2.Distance(localPoint, pointOnSegment);
 
             if (distance < closestDistance)
             {
@@ -208,28 +229,21 @@ public class ZipperPath : MonoBehaviour
     private void UpdateHandle(float progress)
     {
         if (_handleTransform == null) return;
-        _handleTransform.position = GetPositionAtProgress(progress);
+
+        Vector2 localPos = GetPositionAtProgress(progress);
+        _handleTransform.position = transform.TransformPoint(new Vector3(localPos.x, localPos.y, 0f));
     }
 
     private void UpdateZipperSprite(float progress)
     {
         if (_zipperSpriteRenderer == null) return;
-        if (_pathData.ZipperSprites.Count == 0) return;
 
-        Sprite activeSprite = _pathData.ZipperSprites[0].Sprite;
-
-        for (int i = 0; i < _pathData.ZipperSprites.Count; i++)
-        {
-            if (progress >= _pathData.ZipperSprites[i].Threshold)
-            {
-                activeSprite = _pathData.ZipperSprites[i].Sprite;
-            }
-        }
-
-        _zipperSpriteRenderer.sprite = activeSprite;
+        Sprite sprite = _pathData.GetSpriteForProgress(progress);
+        if (sprite != null)
+            _zipperSpriteRenderer.sprite = sprite;
     }
 
-    private Vector3 GetPositionAtProgress(float progress)
+    private Vector2 GetPositionAtProgress(float progress)
     {
         IReadOnlyList<Vector2> waypoints = _pathData.Waypoints;
         float targetLength = progress * _totalLength;
@@ -240,14 +254,12 @@ public class ZipperPath : MonoBehaviour
             if (accumulated + _segmentLengths[i] >= targetLength)
             {
                 float t = (targetLength - accumulated) / _segmentLengths[i];
-                Vector2 pos = Vector2.Lerp(waypoints[i], waypoints[i + 1], t);
-                return new Vector3(pos.x, pos.y, 0f);
+                return Vector2.Lerp(waypoints[i], waypoints[i + 1], t);
             }
             accumulated += _segmentLengths[i];
         }
 
-        Vector2 last = waypoints[waypoints.Count - 1];
-        return new Vector3(last.x, last.y, 0f);
+        return waypoints[waypoints.Count - 1];
     }
 
     private void HandleFailure()
@@ -287,6 +299,8 @@ public class ZipperPath : MonoBehaviour
             Debug.LogWarning("ZipperPath has no GameStateEvent assigned.");
             return;
         }
+
+        Debug.Log("Path end!");
 
         _gameStateEvent.Raise(new GameStateData(_completionState, GameState.MiniGame));
     }

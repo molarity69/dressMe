@@ -19,14 +19,17 @@ MonoBehaviour:
   - {x: -1, y: -2}
   - {x: 0, y: -2}
   - {x: 0, y: -1}
-  - {x: 1, y: -1}
   - {x: 1, y: 0}
-  - {x: 2, y: 0}
-  - {x: 2, y: 1}
-  - {x: 2, y: 4}
-  _tolerance: 0.1
+  - {x: 1, y: 0}
+  _tolerance: 0.2
   _checkpointPercentages:
-  - 0.25
-  - 0.75
+  - 0.5
   _failureMode: 0
-  _zipperSprites: []
+  _zipperSprites:
+  - {fileID: 21300000, guid: 81e9e5f609a9cfc4596cde044230255f, type: 3}
+  - {fileID: 21300000, guid: adb710477767e2343ae2135eae7e60ff, type: 3}
+  - {fileID: 21300000, guid: f3e7173461ebfa04e8da21e87e063e79, type: 3}
+  - {fileID: 21300000, guid: fdceccbc0ebc82b4387689fca1c890be, type: 3}
+  - {fileID: 21300000, guid: 08dfd3ea90b19494cb255852725d120b, type: 3}
+  - {fileID: 21300000, guid: 08dfd3ea90b19494cb255852725d120b, type: 3}
+  - {fileID: 21300000, guid: 790035507c291804386267b2c223f705, type: 3}

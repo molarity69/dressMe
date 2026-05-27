@@ -36,13 +36,13 @@ public class Hotspot : MonoBehaviour, IPointerClickHandler
         switch(_hotspotID)
         {
             case HotspotID.Window:
-                if(_spriteRenderer.sprite == _originalSprite)
+                if(_spriteRenderer.sprite == _alternateSprite)
                 {
                     _spriteRenderer.sprite = null;
                 }
                 else
                 {
-                    _spriteRenderer.sprite = _originalSprite;
+                    _spriteRenderer.sprite = _alternateSprite;
                 }
                 break;
         }

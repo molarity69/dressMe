@@ -16,13 +16,24 @@ public class ZipperPathData : ScriptableObject
     [SerializeField] private FailureMode _failureMode = FailureMode.ReturnToStart;
 
     [Header("Zipper Sprites")]
-    [SerializeField] private List<ZipperSpriteThreshold> _zipperSprites = new List<ZipperSpriteThreshold>();
+    [Tooltip("Add sprites in order from least zipped to fully zipped. Thresholds are calculated automatically.")]
+    [SerializeField] private List<Sprite> _zipperSprites = new List<Sprite>();
 
     public IReadOnlyList<Vector2> Waypoints => _waypoints;
     public float Tolerance => _tolerance;
     public IReadOnlyList<float> CheckpointPercentages => _checkpointPercentages;
     public FailureMode FailureMode => _failureMode;
-    public IReadOnlyList<ZipperSpriteThreshold> ZipperSprites => _zipperSprites;
+    public IReadOnlyList<Sprite> ZipperSprites => _zipperSprites;
+
+    public Sprite GetSpriteForProgress(float progress)
+    {
+        if (_zipperSprites == null || _zipperSprites.Count == 0)
+            return null;
+
+        int index = Mathf.FloorToInt(progress * _zipperSprites.Count);
+        index = Mathf.Clamp(index, 0, _zipperSprites.Count - 1);
+        return _zipperSprites[index];
+    }
 }
 
 public enum FailureMode
@@ -31,10 +42,3 @@ public enum FailureMode
     ReturnToLastCheckpoint
 }
 
-[System.Serializable]
-public class ZipperSpriteThreshold
-{
-    [Tooltip("Progress value between 0 and 1 at which this sprite becomes active.")]
-    public float Threshold;
-    public Sprite Sprite;
-}
