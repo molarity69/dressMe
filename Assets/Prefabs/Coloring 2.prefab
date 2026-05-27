@@ -95,6 +95,8 @@ MonoBehaviour:
   _completionThreshold: 0.85
   _outOfBoundsFailThreshold: 0.2
   _progressSampleInterval: 0.4
+  _audioManager: {fileID: 0}
+  _drawingSound: {fileID: 0}
   _showProgressOnScreen: 1
 --- !u!1 &4995027136300517454
 GameObject:
