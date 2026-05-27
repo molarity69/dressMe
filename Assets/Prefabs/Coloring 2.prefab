@@ -10,9 +10,9 @@ GameObject:
   m_Component:
   - component: {fileID: 6537232730798341306}
   - component: {fileID: 3488308844391318380}
-  - component: {fileID: 5946638565104634459}
+  - component: {fileID: 8391139986379359652}
   m_Layer: 5
-  m_Name: Coloring
+  m_Name: Coloring 2
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -48,7 +48,7 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 3764209131761295279}
   m_CullTransparentMesh: 1
---- !u!114 &5946638565104634459
+--- !u!114 &8391139986379359652
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -57,7 +57,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 3764209131761295279}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 607d1067d92ff81448bfbeae57b60b90, type: 3}
+  m_Script: {fileID: 11500000, guid: ad91a4a30bb02734e83c1dcc37cf6cc8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   _injectedCanvas: {fileID: 0}
@@ -65,7 +65,9 @@ MonoBehaviour:
   _injectedSketchDisplay: {fileID: 3512113369176914567}
   _injectedPanelRect: {fileID: 5900487688911964095}
   _sketchTexture: {fileID: 2800000, guid: 81b98b12c289ecc41b2dba5350a6da8b, type: 3}
-  _maskTexture: {fileID: 2800000, guid: 5bb81ab8a8fd33b4c82b6ab3f5fde831, type: 3}
+  _maskTexture: {fileID: 0}
+  _paperMaskTexture: {fileID: 2800000, guid: c688f515cf770e64a93ddfbbb1ecf0e5, type: 3}
+  _referenceResolution: 4096
   _markerCursorSprite: {fileID: 21300000, guid: 2de9220626211af448b1648dd014d38e, type: 3}
   _markerCursorPivot: {x: 0, y: 1}
   _markerCursorSize: {x: 399, y: 380}
@@ -73,21 +75,21 @@ MonoBehaviour:
   - {r: 1, g: 0.15, b: 0.15, a: 1}
   - {r: 0.15, g: 0.6, b: 0.15, a: 1}
   - {r: 0.15, g: 0.3, b: 1, a: 1}
-  _brushRadius: 4
-  _brushHardness: 0.4
-  _edgeZoneWidth: 120
+  _brushRadius: 24
+  _brushHardness: 0.2
+  _edgeZoneWidth: 100
   _edgeSampleDirections: 8
   _curveAmplitude: 0
   _curveFrequency: 0
-  _jitterIntensity: 80
+  _jitterIntensity: 20
   _jitterSpeed: 3
-  _resistanceStrength: 60
+  _resistanceStrength: 80
   _impulseDelayDuration: 0
   _impulseSpeed: 80
-  _impulseMagnitude: 20
+  _impulseMagnitude: 10
   _returnSpeed: 80
-  _minVelocityThreshold: 80
-  _maxVelocityThreshold: 800
+  _minVelocityThreshold: 20
+  _maxVelocityThreshold: 200
   _maxVelocityMultiplier: 2.5
   _velocitySmoothing: 8
   _completionThreshold: 0.85

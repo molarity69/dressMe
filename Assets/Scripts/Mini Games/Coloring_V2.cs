@@ -1,25 +1,33 @@
 ﻿// ============================================================
-// Coloring.cs (v6 — Unified Fix: Paint Regression + LMB-Gated Effects)
+// Coloring.cs (v7 — Paint Visibility Fix + Mask Diagnostics + Curve Removed)
 //
-// RESPONSIBILITY: Self-contained coloring minigame simulating
-// the motor struggle of painting within lines.
+// BUGS FIXED FROM v6:
+//   [1] PAINT INVISIBLE — _paintingDisplay.color is forced to Color.white in Awake.
+//       A RawImage with alpha=0 (set accidentally in the Inspector or left from a
+//       previous component swap) makes paint invisible even though StampBrush writes
+//       pixels correctly — which is why the progress tracker still counted them.
 //
-// CHANGES FROM v5:
-//   [1] PAINT REGRESSION FIXED — StampBrush and step calculation now both use
-//       _runtimeBrushRadius (canvas-scale-corrected). v5 used raw _brushRadius
-//       in StampBrush while zone detection used scaled values, causing zone
-//       misclassification on non-512px canvases that silently suppressed painting.
-//   [2] EDGE ZONE LOOP FIXED — UpdateCursorZone now uses _runtimeEdgeZoneWidth
-//       as the step limit instead of raw _edgeZoneWidth. These diverged on any
-//       canvas not exactly 512px wide, making zone detection inconsistent.
-//   [3] FIX A — Jitter now fires on _isPainting == true (LMB held), not on hover.
-//       Hovering near the edge is calm. Pressing LMB is when the cursor fights back.
-//   [4] FIX B — NearEdge hover path explicitly confirmed: cursor tracks raw mouse
-//       1:1 when not painting. Grace countdown only begins on LMB down.
-//   [5] FIX C — Velocity multiplier only escalates while _isPainting. Decays toward
-//       1.0 when not painting so hover speed cannot pre-load difficulty before a stroke.
-//   [6] _canvasScale Inspector field removed. Scale is always auto-derived from
-//       _canvasWidth / 512f. One source of truth, no stale Inspector values.
+//   [2] OUTSIDE DETECTION BROKEN — mask texture compression was the culprit.
+//       DXT1/BC1 compression turns hard black edges grey (~0.3–0.6 grayscale),
+//       pushing them above the 0.5 threshold. Every pixel reads as "inside",
+//       so paintedOutside is always 0 and zone detection never finds an edge.
+//       Fix: Awake now logs white/black pixel counts and warns loudly if the mask
+//       appears all-white. Set mask Compression to None in Import Settings.
+//
+//   [3] CURVED DRAWING REMOVED — ComputeCurvedPosition and all related fields
+//       (_curveAmplitude, _curveFrequency, _runtimeCurveAmplitude,
+//       _distanceTraveledThisStroke) are gone. Middle zone tracks raw mouse 1:1.
+//
+// ALL v6 FIXES RETAINED:
+//   • Runtime scaling (_runtimeBrushRadius etc.) — auto-derived from canvasWidth/512f
+//   • LMB-gated jitter and resistance (Fix A + B)
+//   • Velocity multiplier decays on LMB release (Fix C)
+//   • _runtimeEdgeZoneWidth used as loop limit in UpdateCursorZone (edge loop fix)
+//   • StampBrush uses _runtimeBrushRadius (paint regression fix)
+//
+// MASK TEXTURE IMPORT REQUIREMENTS:
+//   • Read/Write Enabled : ON
+//   • Compression        : None  (NEVER DXT1/BC1/ETC — see bug [2] above)
 //
 // PLACE ON: 'Coloring' GameObject
 //
@@ -33,13 +41,10 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-public class ColoringMinigame_v2 : MonoBehaviour
+public class Coloring_V2 : MonoBehaviour
 {
     // ============================================================
     // SCENE REFERENCES — Injected via Inspector
-    // WHY: Script owns zero UI construction. It receives the pre-built
-    //      hierarchy and operates on it. All dependencies are explicit
-    //      and fail loudly in Awake() if missing.
     // ============================================================
 
     [Header("Scene References (Required)")]
@@ -60,34 +65,19 @@ public class ColoringMinigame_v2 : MonoBehaviour
     // ============================================================
 
     [Header("Textures (Required)")]
-    [Tooltip("Visible sketch outline. Transparent background, opaque black lines.")]
+    [Tooltip("Visible sketch outline. Transparent interior, opaque lines.")]
     [SerializeField] private Texture2D _sketchTexture;
 
     [Tooltip(
-        "Mask: White = valid paint area (T-shirt interior). Black = outline/outside.\n" +
-        "MUST have Read/Write enabled in Import Settings.\n" +
-        "LEAVE NULL to auto-derive from _sketchTexture at runtime (recommended for 4K assets).\n" +
-        "Auto-derive uses a flood-fill from the T-shirt's bounding-box center — works as long\n" +
-        "as the outline is a single closed shape with no interior disconnected blobs."
+        "Mask: White = valid paint area. Black = outline/outside.\n" +
+        "IMPORT REQUIREMENTS (both mandatory):\n" +
+        "  • Read/Write Enabled : ON\n" +
+        "  • Compression        : None\n" +
+        "WHY: DXT1/BC1 compression turns hard black edges grey (~0.3–0.6 grayscale),\n" +
+        "pushing them above the 0.5 threshold. The entire mask reads as white,\n" +
+        "so zone detection never finds an edge and outside paint is never counted."
     )]
     [SerializeField] private Texture2D _maskTexture;
-
-    [Tooltip(
-        "Paper boundary mask. White = on the A4 paper. Black = outside.\n" +
-        "Paint is blocked (not applied, not penalised) outside white pixels.\n" +
-        "LEAVE NULL to skip paper boundary enforcement (paint allowed everywhere).\n" +
-        "MUST have Read/Write enabled in Import Settings."
-    )]
-    [SerializeField] private Texture2D _paperMaskTexture;
-
-    [Header("Resolution")]
-    [Tooltip(
-        "Reference resolution that all Inspector pixel-unit values (brush radius, edge zone, etc.) are authored at.\n" +
-        "512 = legacy default. For 4K assets author your brush/edge values at 4096 and set this to 4096.\n" +
-        "Recommended: match this to your actual texture width so Inspector values are literal pixel counts."
-    )]
-    [SerializeField] private float _referenceResolution = 512f;
-
 
     [Header("Cursor Visual")]
     [Tooltip(
@@ -130,13 +120,6 @@ public class ColoringMinigame_v2 : MonoBehaviour
 
     [Tooltip("Radial sample count for edge detection. 8 = 45° increments.")]
     [SerializeField] private int _edgeSampleDirections = 8;
-
-    [Header("Middle Zone — Curved Drawing (LMB Held)")]
-    [Tooltip("Peak perpendicular wave displacement in texture pixels at 512px resolution.")]
-    [SerializeField] private float _curveAmplitude = 28f;
-
-    [Tooltip("Wave cycles per pixel traveled. 0.015 ≈ 1 full wave per 67px.")]
-    [SerializeField] private float _curveFrequency = 0.015f;
 
     [Header("Edge Zone — Visual Jitter (LMB Held)")]
     [Tooltip(
@@ -223,7 +206,7 @@ public class ColoringMinigame_v2 : MonoBehaviour
     // Cursor visual
     private Image _cursorImage;
     private RectTransform _cursorRect;
-    private Texture2D _cursorTexture;     // Only allocated for circle fallback
+    private Texture2D _cursorTexture;
     private Vector2 _textureToScreenScale;
     private bool _useMarkerCursor;
 
@@ -234,19 +217,11 @@ public class ColoringMinigame_v2 : MonoBehaviour
     // Mask data
     private Color[] _maskPixels;
     private int _totalMaskPixels;
-    // WHY: Kept separate from _maskPixels so paper-boundary blocking and
-    //      T-shirt-interior scoring are two independent queries with zero coupling.
-    //      Paper block = silent (no paint applied, no fail tick).
-    //      T-shirt outside = loud (contributes to _paintedOutsideFraction → fail).
-    private Color[] _paperMaskPixels;
-    private bool _hasPaperMask;
-
 
     // Input state
     private bool _isPainting;
     private int _currentColorIndex;
     private Color _currentColor;
-    private float _distanceTraveledThisStroke;
 
     // WHY: _effectiveCursorPos is the single source of truth.
     //      The painter and the visual cursor BOTH read it.
@@ -273,8 +248,8 @@ public class ColoringMinigame_v2 : MonoBehaviour
     private float _currentImpulseDistance = 0f;
     private Vector2 _currentImpulseDirection;
 
-    // WHY: Locked at MovingOut entry. Mid-cycle velocity changes don't shift the
-    //      goalposts while the impulse is already travelling. New velocity on next cycle.
+    // WHY: Locked at MovingOut entry so mid-cycle velocity changes don't shift
+    //      the goalposts while the impulse is already travelling.
     private float _currentEffectiveMagnitude;
 
     // Velocity tracking
@@ -293,20 +268,12 @@ public class ColoringMinigame_v2 : MonoBehaviour
     // WHY: All Inspector pixel-unit values are authored at 512px reference resolution.
     //      These runtime versions are multiplied by (canvasWidth / 512f) once in Awake
     //      so every downstream system automatically handles any texture size.
-    //      StampBrush, step calculations, and zone detection ALL use runtime values —
-    //      this is the root fix for the v5 paint regression.
     private float _runtimeBrushRadius;
     private float _runtimeEdgeZoneWidth;
-    private float _runtimeCurveAmplitude;
     private float _runtimeImpulseMagnitude;
     private float _runtimeResistanceStrength;
     private float _runtimeMinVelocityThreshold;
     private float _runtimeMaxVelocityThreshold;
-
-    // Add to PRIVATE STATE section, alongside _canvasWidth/_canvasHeight:
-    private int _contentOffsetX;   // left edge of detected content in original texture
-    private int _contentOffsetY;   // bottom edge of detected content in original texture
-
 
     // ============================================================
     // INITIALIZATION
@@ -335,75 +302,33 @@ public class ColoringMinigame_v2 : MonoBehaviour
         _sketchDisplay = _injectedSketchDisplay;
         _panelRect = _injectedPanelRect;
 
+        // ── FIX [1]: Force RawImage color to opaque white ────────────────────
+        // WHY: A RawImage with color.a == 0 (set accidentally in the Inspector,
+        //      or left over from a previous Image component) renders the texture
+        //      as fully transparent. StampBrush still writes pixels and the progress
+        //      tracker still reads them — so paint "works" but is invisible.
+        //      Forcing white here guarantees the texture is always visible regardless
+        //      of what the Inspector value was.
+        Color prevColor = _paintingDisplay.color;
+        _paintingDisplay.color = Color.white;
+        if (prevColor != Color.white)
+            Debug.LogWarning($"[ColoringMinigame] ⚠️ RawImage color was {prevColor} — " +
+                             "forced to Color.white. If paint was invisible, this was the cause.");
+
         BuildCursorVisual();
 
         if (_showProgressOnScreen)
             BuildDebugText();
 
-        // ── Resolve mask texture ─────────────────────────────────────────────────
-        // WHY: If the designer supplies a hand-painted mask we use it directly.
-        //      If not (null), we flood-fill the outline texture at runtime.
-        //      This removes a manual asset step and stays correct if the outline art changes —
-        //      regenerate is free, re-painting a mask by hand is error-prone at 4K.
-        if (_maskTexture == null)
-        {
-            if (_sketchTexture == null)
-            {
-                Debug.LogError("[ColoringMinigame] Both _maskTexture and _sketchTexture are null. " +
-                               "Assign at least _sketchTexture so the interior mask can be derived.");
-                enabled = false;
-                return;
-            }
-            _maskTexture = DeriveMaskFromOutline(_sketchTexture);
-            if (_maskTexture == null)
-            {
-                Debug.LogError("[ColoringMinigame] Flood-fill mask derivation failed. " +
-                               "Ensure _sketchTexture has Read/Write enabled and contains a closed outline.");
-                enabled = false;
-                return;
-            }
-            Debug.Log("[ColoringMinigame] Interior mask auto-derived from outline texture.");
-        }
-
+        // ── Mask setup ───────────────────────────────────────────────────────
         _maskPixels = _maskTexture.GetPixels();
         _canvasWidth = _maskTexture.width;
         _canvasHeight = _maskTexture.height;
 
-        // ── Paper boundary mask ──────────────────────────────────────────────────
-        // WHY: Optional. When assigned, StampBrush silently skips pixels outside white area.
-        //      We validate dimensions match so coordinate lookups stay in the same space.
-        if (_paperMaskTexture != null)
-        {
-            if (_paperMaskTexture.width != _canvasWidth || _paperMaskTexture.height != _canvasHeight)
-            {
-                Debug.LogError(
-                    $"[ColoringMinigame] _paperMaskTexture size ({_paperMaskTexture.width}×{_paperMaskTexture.height}) " +
-                    $"does not match _maskTexture size ({_canvasWidth}×{_canvasHeight}). " +
-                    "Both textures must be identical resolution. Paper boundary disabled."
-                );
-                _hasPaperMask = false;
-            }
-            else
-            {
-                _paperMaskPixels = _paperMaskTexture.GetPixels();
-                _hasPaperMask = true;
-                Debug.Log("[ColoringMinigame] Paper boundary mask loaded.");
-            }
-        }
-        else
-        {
-            _hasPaperMask = false;
-            Debug.Log("[ColoringMinigame] No paper mask assigned — paint unrestricted by paper bounds.");
-        }
-
-        // ── Scale all authored pixel values to actual canvas resolution ──────────
-        // WHY: _referenceResolution is the resolution the designer thought in when
-        //      setting Inspector values. Scale once here; every downstream system reads
-        //      a _runtime* value. One source of truth, zero per-system manual conversion.
-        float scale = _canvasWidth / _referenceResolution;
+        // WHY: Single auto-derived scale factor. No Inspector float to go stale.
+        float scale = _canvasWidth / 512f;
         _runtimeBrushRadius = _brushRadius * scale;
         _runtimeEdgeZoneWidth = _edgeZoneWidth * scale;
-        _runtimeCurveAmplitude = _curveAmplitude * scale;
         _runtimeImpulseMagnitude = _impulseMagnitude * scale;
         _runtimeResistanceStrength = _resistanceStrength * scale;
         _runtimeMinVelocityThreshold = _minVelocityThreshold * scale;
@@ -413,19 +338,40 @@ public class ColoringMinigame_v2 : MonoBehaviour
         _textureToScreenScale = new Vector2(panelSize.x / _canvasWidth,
                                             panelSize.y / _canvasHeight);
 
+        // ── FIX [2]: Mask diagnostics ────────────────────────────────────────
+        // WHY: Count white AND black pixels separately so a compressed mask is
+        //      immediately visible in the console rather than silently breaking
+        //      zone detection and outside-paint tracking.
         _totalMaskPixels = 0;
+        int blackMaskPixels = 0;
         for (int i = 0; i < _maskPixels.Length; i++)
-            if (_maskPixels[i].grayscale > 0.5f)
-                _totalMaskPixels++;
+        {
+            if (_maskPixels[i].grayscale > 0.5f) _totalMaskPixels++;
+            else blackMaskPixels++;
+        }
+
+        Debug.Log($"[ColoringMinigame] Mask: {_totalMaskPixels} white px, " +
+                  $"{blackMaskPixels} black px, {_maskPixels.Length} total. " +
+                  $"Canvas {_canvasWidth}×{_canvasHeight}, scale={scale:F2}.");
+
+        if (blackMaskPixels == 0)
+        {
+            Debug.LogError(
+                "[ColoringMinigame] ⚠️ Mask has ZERO black pixels — the entire mask reads as white.\n" +
+                "Root cause: texture compression (DXT1/BC1/ETC) turns hard black edges grey,\n" +
+                "pushing them above the 0.5 grayscale threshold.\n" +
+                "FIX: Select the mask texture → Import Settings → Compression → None."
+            );
+        }
 
         if (_totalMaskPixels == 0)
         {
             Debug.LogError("[ColoringMinigame] Mask has zero white pixels! " +
-                           "Check: (1) mask texture Read/Write enabled, " +
-                           "(2) white fill inside the outline.");
+                           "Check: (1) Read/Write enabled, (2) white fill inside the outline.");
             return;
         }
 
+        // ── Canvas texture ───────────────────────────────────────────────────
         _canvasTexture = new Texture2D(_canvasWidth, _canvasHeight, TextureFormat.RGBA32, false);
         _canvasTexture.filterMode = FilterMode.Bilinear;
         Color[] clear = new Color[_canvasWidth * _canvasHeight];
@@ -433,14 +379,13 @@ public class ColoringMinigame_v2 : MonoBehaviour
         _canvasTexture.SetPixels(clear);
         _canvasTexture.Apply();
 
-        // WHY: This is the line that makes paint visible. If _paintingDisplay.texture
-        //      is null, SetPixels/Apply work but nothing ever renders.
+        // WHY: This is the line that makes paint visible. Without it, StampBrush
+        //      writes to _canvasTexture but nothing is ever displayed.
         _paintingDisplay.texture = _canvasTexture;
 
         if (_sketchTexture != null && _sketchDisplay.sprite == null)
             _sketchDisplay.sprite = TextureToSprite(_sketchTexture);
 
-        // Circle fallback only — marker sprite was already wired in BuildCursorVisual()
         if (!_useMarkerCursor)
         {
             _cursorTexture = GenerateCircleCursorTexture(64);
@@ -458,22 +403,17 @@ public class ColoringMinigame_v2 : MonoBehaviour
 
         Cursor.visible = false;
 
-        Debug.Log($"[ColoringMinigame] Initialised. {_canvasWidth}×{_canvasHeight}, " +
-                  $"reference={_referenceResolution}px, scale={scale:F2}, " +
-                  $"{_totalMaskPixels} paintable px, paper mask={_hasPaperMask}. " +
+        Debug.Log($"[ColoringMinigame] Initialised. " +
                   $"Cursor: {(_useMarkerCursor ? "Marker sprite" : "Generated circle")}.");
     }
 
-
-    // WHY: Isolated so swapping cursor implementation only touches this method.
     private void BuildCursorVisual()
     {
         _cursorGO = new GameObject("CursorVisual");
-        _cursorGO.transform.SetParent(_panelRect.parent, false);
+        _cursorGO.transform.SetParent(_panelRect, false);
 
         _cursorImage = _cursorGO.AddComponent<Image>();
-        // WHY: raycastTarget = false — cursor visual must never eat mouse events
-        //      that should reach the panel beneath it.
+        // WHY: raycastTarget = false — cursor visual must never eat mouse events.
         _cursorImage.raycastTarget = false;
 
         _cursorRect = _cursorGO.GetComponent<RectTransform>();
@@ -482,8 +422,6 @@ public class ColoringMinigame_v2 : MonoBehaviour
 
         if (_markerCursorSprite != null)
         {
-            // WHY: Pivot at the marker tip means anchoredPosition maps DIRECTLY to the
-            //      paint application point — zero offset math required downstream.
             _cursorImage.sprite = _markerCursorSprite;
             _cursorRect.pivot = _markerCursorPivot;
             _cursorRect.sizeDelta = _markerCursorSize;
@@ -491,16 +429,12 @@ public class ColoringMinigame_v2 : MonoBehaviour
         }
         else
         {
-            // WHY: Fallback circle for development without art assets.
-            //      sizeDelta is updated every frame in UpdateCursorVisual to match brushRadius.
             _cursorRect.pivot = new Vector2(0.5f, 0.5f);
             _cursorRect.sizeDelta = new Vector2(_brushRadius * 2f, _brushRadius * 2f);
             _useMarkerCursor = false;
         }
     }
 
-    // WHY: Parented to root Canvas so it renders above all panel content
-    //      and is never clipped by the panel's RectTransform bounds.
     private void BuildDebugText()
     {
         _debugTextGO = new GameObject("DebugText");
@@ -545,133 +479,6 @@ public class ColoringMinigame_v2 : MonoBehaviour
     private Sprite TextureToSprite(Texture2D tex)
         => Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f));
 
-    /// <summary>
-    /// WHY: Eliminates the manual "paint the interior white" asset step.
-    ///      The outline texture already encodes everything we need — black pixels ARE the boundary.
-    ///      We flood-fill from the bounding-box center outward, treating any pixel whose alpha > 0
-    ///      as a wall (outline pixel). Everything the fill reaches = interior = white in the output mask.
-    ///
-    ///      Edge case handled: if the center pixel happens to land on an outline pixel (unlucky bounding
-    ///      box on an asymmetric shape), we spiral outward from center until we find a transparent pixel.
-    ///      If the shape is not a closed outline, the fill leaks to canvas edges — logged as a warning.
-    /// </summary>
-    private Texture2D DeriveMaskFromOutline(Texture2D outlineTexture)
-    {
-        int w = outlineTexture.width;
-        int h = outlineTexture.height;
-        Color[] src = outlineTexture.GetPixels();
-
-        // ── Find bounding box of all opaque (outline) pixels ────────────────────
-        int bboxMinX = w, bboxMaxX = 0, bboxMinY = h, bboxMaxY = 0;
-        for (int y = 0; y < h; y++)
-            for (int x = 0; x < w; x++)
-                if (src[y * w + x].a > 0.1f)
-                {
-                    if (x < bboxMinX) bboxMinX = x;
-                    if (x > bboxMaxX) bboxMaxX = x;
-                    if (y < bboxMinY) bboxMinY = y;
-                    if (y > bboxMaxY) bboxMaxY = y;
-                }
-
-        if (bboxMaxX <= bboxMinX || bboxMaxY <= bboxMinY)
-        {
-            Debug.LogError("[DeriveMaskFromOutline] No opaque pixels found in outline texture. " +
-                           "Check Read/Write is enabled on the texture import settings.");
-            return null;
-        }
-
-        // ── Find a transparent seed pixel near the bounding-box center ──────────
-        // WHY: BFS from bbox center. If center is on the outline, spiral outward.
-        //      We stop the moment we find a transparent pixel — that's our interior seed.
-        int cx = (bboxMinX + bboxMaxX) / 2;
-        int cy = (bboxMinY + bboxMaxY) / 2;
-        Vector2Int seed = Vector2Int.zero;
-        bool seedFound = false;
-
-        // Spiral search: radius 0 → (half the shorter bbox dimension)
-        int maxSearchRadius = Mathf.Min((bboxMaxX - bboxMinX), (bboxMaxY - bboxMinY)) / 2;
-        for (int radius = 0; radius <= maxSearchRadius && !seedFound; radius++)
-        {
-            for (int dx = -radius; dx <= radius && !seedFound; dx++)
-                for (int dy = -radius; dy <= radius && !seedFound; dy++)
-                {
-                    if (Mathf.Abs(dx) != radius && Mathf.Abs(dy) != radius) continue; // shell only
-                    int sx = cx + dx, sy = cy + dy;
-                    if (sx < 0 || sx >= w || sy < 0 || sy >= h) continue;
-                    if (src[sy * w + sx].a <= 0.1f)
-                    {
-                        seed = new Vector2Int(sx, sy);
-                        seedFound = true;
-                    }
-                }
-        }
-
-        if (!seedFound)
-        {
-            Debug.LogError("[DeriveMaskFromOutline] Could not find a transparent seed pixel " +
-                           "inside the outline bounding box. The outline may be solid or too thick.");
-            return null;
-        }
-
-        // ── BFS flood-fill from seed ─────────────────────────────────────────────
-        // WHY: BFS (not recursive DFS) avoids stack overflow on large 4K textures.
-        //      We allocate a flat bool array instead of a HashSet — O(1) lookup, cache friendly.
-        bool[] visited = new bool[w * h];
-        bool[] interior = new bool[w * h];
-        System.Collections.Generic.Queue<Vector2Int> queue =
-            new System.Collections.Generic.Queue<Vector2Int>();
-
-        queue.Enqueue(seed);
-        visited[seed.y * w + seed.x] = true;
-
-        int[] dx4 = { 1, -1, 0, 0 };
-        int[] dy4 = { 0, 0, 1, -1 };
-        bool leaked = false;
-
-        while (queue.Count > 0)
-        {
-            Vector2Int p = queue.Dequeue();
-            interior[p.y * w + p.x] = true;
-
-            for (int d = 0; d < 4; d++)
-            {
-                int nx = p.x + dx4[d];
-                int ny = p.y + dy4[d];
-
-                // WHY: Hitting the canvas edge means the outline wasn't closed.
-                //      We flag it but continue — partial fill is better than a crash.
-                if (nx < 0 || nx >= w || ny < 0 || ny >= h)
-                {
-                    leaked = true;
-                    continue;
-                }
-
-                int ni = ny * w + nx;
-                if (visited[ni]) continue;
-                if (src[ni].a > 0.1f) continue; // outline pixel = wall
-
-                visited[ni] = true;
-                queue.Enqueue(new Vector2Int(nx, ny));
-            }
-        }
-
-        if (leaked)
-            Debug.LogWarning("[DeriveMaskFromOutline] Flood-fill reached canvas edges — the T-shirt " +
-                             "outline may not be fully closed. Interior mask may be inaccurate.");
-
-        // ── Write output mask texture ────────────────────────────────────────────
-        Texture2D mask = new Texture2D(w, h, TextureFormat.RGBA32, false);
-        Color[] maskPixels = new Color[w * h];
-        for (int i = 0; i < maskPixels.Length; i++)
-            maskPixels[i] = interior[i] ? Color.white : Color.black;
-
-        mask.SetPixels(maskPixels);
-        mask.Apply();
-        mask.name = "DerivedInteriorMask"; // WHY: Identifies runtime-created mask for OnDestroy cleanup
-        return mask;
-    }
-
-
     // ============================================================
     // UPDATE LOOP
     // ============================================================
@@ -683,8 +490,8 @@ public class ColoringMinigame_v2 : MonoBehaviour
         HandleColorCycling();
         HandlePaintingInput();
         HandleResetInput();
-        // WHY: Velocity updates before zone/cursor so _currentVelocityMultiplier
-        //      is fresh when jitter and impulse read it this same frame.
+        // WHY: Velocity before zone/cursor so _currentVelocityMultiplier is fresh
+        //      when jitter and impulse read it this same frame.
         UpdateVelocity();
         UpdateCursorZone();
         UpdateEffectiveCursorPos();
@@ -703,25 +510,19 @@ public class ColoringMinigame_v2 : MonoBehaviour
         {
             _currentColorIndex = (_currentColorIndex + 1) % _availableColors.Length;
             _currentColor = _availableColors[_currentColorIndex];
-            // WHY: Image.color tints both circle and marker sprite — marker must be
-            //      white/greyscale so the tint reads as the pure paint colour.
             _cursorImage.color = _currentColor;
         }
     }
 
     private void HandlePaintingInput()
     {
-        // WHY: Block new strokes while failed or complete. Without this, a held LMB
-        //      during the 1.5s fail countdown re-dirties the canvas before
-        //      ResetCanvas() fires, immediately re-triggering the fail condition.
+        // WHY: Block new strokes while failed or complete — prevents held LMB during
+        //      the 1.5s fail countdown from re-dirtying the canvas before ResetCanvas fires.
         if (Input.GetMouseButtonDown(0) && !_isComplete && !_hasFailed)
         {
             _isPainting = true;
-            _distanceTraveledThisStroke = 0f;
             _lastEffectiveCursorPos = _effectiveCursorPos;
             _effectivePosInitialised = true;
-            // WHY: Fresh grace period every new stroke — rewards re-entering the edge
-            //      zone after retreating to the middle.
             ResetImpulseState();
         }
 
@@ -734,9 +535,8 @@ public class ColoringMinigame_v2 : MonoBehaviour
         }
     }
 
-    // WHY: CancelInvoke is critical. Without it, pressing R during the auto-reset
-    //      countdown fires ResetCanvas() a second time, clearing a canvas the player
-    //      may have already started repainting.
+    // WHY: CancelInvoke prevents double-reset when R is pressed during the
+    //      auto-reset countdown — without it ResetCanvas fires twice.
     private void HandleResetInput()
     {
         if (Input.GetKeyDown(KeyCode.R))
@@ -755,8 +555,8 @@ public class ColoringMinigame_v2 : MonoBehaviour
     ///      average to prevent single-frame delta spikes from jarring mid-stroke jumps.
     ///
     ///      FIX C: Multiplier only escalates while _isPainting.
-    ///      When not painting it decays toward 1.0 so hover speed cannot pre-load
-    ///      difficulty before the player even clicks — escalation is earned stroke by stroke.
+    ///      Decays toward 1.0 when not painting so hover speed cannot pre-load
+    ///      difficulty before the player clicks.
     /// </summary>
     private void UpdateVelocity()
     {
@@ -777,8 +577,12 @@ public class ColoringMinigame_v2 : MonoBehaviour
         }
         else
         {
+            // WHY: Decay to zero outside the panel so the multiplier doesn't stay
+            //      elevated when the cursor leaves and re-enters. Without this,
+            //      a fast exit-and-re-entry computes a huge outside→inside delta
+            //      as a false speed spike on the first frame back inside.
             _smoothedVelocity = Mathf.Lerp(_smoothedVelocity, 0f,
-                                               Time.deltaTime * _velocitySmoothing);
+                                                Time.deltaTime * _velocitySmoothing);
             _prevRawPosInitialised = false;
         }
 
@@ -792,21 +596,19 @@ public class ColoringMinigame_v2 : MonoBehaviour
         }
         else
         {
-            // WHY: FIX C — decay toward baseline so hover speed is irrelevant.
-            //      The moment LMB is released, difficulty starts unwinding.
+            // WHY: FIX C — decay toward baseline when not painting so hover speed
+            //      cannot pre-load difficulty before the player clicks. Escalation
+            //      is earned stroke by stroke, not accumulated while hovering.
             _currentVelocityMultiplier = Mathf.Lerp(_currentVelocityMultiplier, 1f,
                                                      Time.deltaTime * _velocitySmoothing);
         }
     }
 
+
     // ============================================================
     // EFFECTIVE CURSOR POSITION — SINGLE SOURCE OF TRUTH
     // ============================================================
 
-    /// <summary>
-    /// WHY: One method, one update per frame, one output position.
-    ///      The visual cursor and the painter both read _effectiveCursorPos.
-    /// </summary>
     private void UpdateEffectiveCursorPos()
     {
         Vector2 rawTexturePos = ScreenToTexturePosition(Input.mousePosition);
@@ -826,32 +628,21 @@ public class ColoringMinigame_v2 : MonoBehaviour
             return;
         }
 
-        Vector2 rawDelta = rawTexturePos - _lastEffectiveCursorPos;
-        float rawDeltaMag = rawDelta.magnitude;
-
         switch (_currentZone)
         {
             case CursorZone.Middle:
                 // WHY: Impulse resets in the safe zone so the delay restarts next time
                 //      the player enters the edge — rewards retreating to the middle.
+                //      Curved drawing removed — middle zone tracks raw mouse 1:1.
                 ResetImpulseState();
-                if (_isPainting && rawDeltaMag > 0.1f)
-                {
-                    _distanceTraveledThisStroke += rawDeltaMag;
-                    _effectiveCursorPos = ComputeCurvedPosition(rawTexturePos);
-                }
-                else
-                {
-                    _effectiveCursorPos = rawTexturePos;
-                }
+                _effectiveCursorPos = rawTexturePos;
                 break;
 
             case CursorZone.NearEdge:
                 if (_isPainting)
                 {
                     // WHY: FIX B — full resistance + impulse stack only while LMB held.
-                    //      Player sees a calm, accurate cursor while planning their stroke.
-                    //      The moment they commit with LMB, the edge fights back.
+                    //      Hover near edge = calm cursor for planning. LMB = edge fights back.
                     _effectiveCursorPos = ComputeResistancePosition(rawTexturePos);
                 }
                 else
@@ -877,8 +668,8 @@ public class ColoringMinigame_v2 : MonoBehaviour
             float dist = Vector2.Distance(_lastEffectiveCursorPos, _effectiveCursorPos);
             if (dist > 0.01f)
             {
-                // WHY: _runtimeBrushRadius used here (was _brushRadius in v5 — the regression).
-                //      Step count must use the same scale as the brush stamp itself.
+                // WHY: _runtimeBrushRadius used here — step count and stamp radius
+                //      must use the same scaled value or gaps appear at large canvas sizes.
                 int steps = Mathf.Max(1, Mathf.CeilToInt(dist / (_runtimeBrushRadius * 0.5f)));
                 for (int i = 1; i <= steps; i++)
                 {
@@ -901,27 +692,6 @@ public class ColoringMinigame_v2 : MonoBehaviour
     // ============================================================
     // BEHAVIOR MODES
     // ============================================================
-
-    /// <summary>
-    /// WHY: Oscillates PERPENDICULAR to dominant movement axis.
-    ///      Driven by _distanceTraveledThisStroke (not Time.time) so wave
-    ///      frequency is consistent regardless of mouse speed — purely spatial.
-    /// </summary>
-    private Vector2 ComputeCurvedPosition(Vector2 rawPos)
-    {
-        Vector2 mouseDelta = rawPos - _lastEffectiveCursorPos;
-        if (mouseDelta.magnitude < 0.1f) return rawPos;
-        mouseDelta.Normalize();
-
-        Vector2 perpendicular = Mathf.Abs(mouseDelta.y) > Mathf.Abs(mouseDelta.x)
-            ? new Vector2(1f, 0f)
-            : new Vector2(0f, 1f);
-
-        float oscillation = Mathf.Sin(_distanceTraveledThisStroke * _curveFrequency * Mathf.PI * 2f)
-                            * _runtimeCurveAmplitude;
-
-        return rawPos + perpendicular * oscillation;
-    }
 
     /// <summary>
     /// WHY: Two composited forces — steady resistance (proportional, always present
@@ -974,15 +744,12 @@ public class ColoringMinigame_v2 : MonoBehaviour
                 break;
 
             case ImpulsePhase.Returning:
-                // WHY: Return speed is constant — the player must learn "after the lurch,
-                //      I have exactly this much time to correct." Variable return speed
-                //      breaks that learned rhythm and makes it feel unfair.
+                // WHY: Return speed constant — player learns "after the lurch I have
+                //      exactly this much time to correct." Variable return breaks that rhythm.
                 _currentImpulseDistance -= _returnSpeed * Time.deltaTime;
                 if (_currentImpulseDistance <= 0f)
                 {
                     _currentImpulseDistance = 0f;
-                    // WHY: Cycle immediately — no second delay. After the first impulse,
-                    //      difficulty is continuous. The player must stay slow.
                     _impulsePhase = ImpulsePhase.MovingOut;
                     _currentEffectiveMagnitude = _runtimeImpulseMagnitude * _currentVelocityMultiplier;
                     PickImpulseDirection();
@@ -991,11 +758,6 @@ public class ColoringMinigame_v2 : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// WHY: ±30° variation per cycle prevents mechanical compensation.
-    ///      Pure outward = player learns the exact angle in 2 reps.
-    ///      ±30° keeps it unpredictable while staying fundamentally "away from sketch."
-    /// </summary>
     private void PickImpulseDirection()
     {
         if (_nearestOutsideDirection == Vector2.zero)
@@ -1014,11 +776,6 @@ public class ColoringMinigame_v2 : MonoBehaviour
         ).normalized;
     }
 
-    /// <summary>
-    /// WHY: Centralised reset so no caller forgets to zero the distance.
-    ///      _currentImpulseDirection intentionally NOT reset — distance is 0 so
-    ///      offset = direction × 0 = (0,0). Direction repicked on next MovingOut.
-    /// </summary>
     private void ResetImpulseState()
     {
         _impulsePhase = ImpulsePhase.Inactive;
@@ -1031,23 +788,12 @@ public class ColoringMinigame_v2 : MonoBehaviour
     // VISUAL CURSOR
     // ============================================================
 
-    /// <summary>
-    /// WHY: Reads _effectiveCursorPos so visual and paint always agree.
-    ///
-    ///      FIX A — Jitter now fires on _isPainting == true (LMB held).
-    ///      In v5 it fired on !_isPainting (hover). This was backward:
-    ///      the hover cursor should be calm so the player can plan their stroke.
-    ///      The moment they press LMB, the cursor starts fighting back.
-    ///      This makes the edge zone feel like a resistance you push into,
-    ///      not a random punishment for proximity.
-    ///
-    ///      Jitter remains VISUAL ONLY — never applied to where paint is stamped.
-    /// </summary>
     private void UpdateCursorVisual()
     {
         Vector2 displayTexturePos = _effectiveCursorPos;
 
-        // WHY: FIX A — jitter gates on _isPainting, not !_isPainting.
+        // WHY: FIX A — jitter gates on _isPainting. Hovering near the edge is calm
+        //      so the player can plan their stroke. The moment LMB is held, it kicks in.
         if (_currentZone == CursorZone.NearEdge && _isPainting)
         {
             float noiseX = Mathf.PerlinNoise(Time.time * _jitterSpeed, 0f) - 0.5f;
@@ -1066,9 +812,6 @@ public class ColoringMinigame_v2 : MonoBehaviour
         _cursorImage.enabled = true;
         _cursorRect.anchoredPosition = TextureToPanelLocal(displayTexturePos);
 
-        // WHY: Circle cursor scales with runtimeBrushRadius — always shows true paint
-        //      footprint. Marker cursor uses fixed artist-set size — resizing it every
-        //      frame would distort the artwork and misrepresent the actual brush tip.
         if (!_useMarkerCursor)
         {
             float cursorSize = _runtimeBrushRadius * 2f *
@@ -1081,17 +824,6 @@ public class ColoringMinigame_v2 : MonoBehaviour
     // ZONE DETECTION
     // ============================================================
 
-    /// <summary>
-    /// WHY: Always computed from RAW mouse position, never _effectiveCursorPos.
-    ///      If computed from effective pos, an impulse pushing the cursor outside
-    ///      the edge zone would immediately kill the impulse — a negative feedback
-    ///      loop that collapses the mechanic in one frame.
-    ///      Raw mouse = player INTENT. Effective pos = player EXPERIENCE.
-    ///
-    ///      FIX (v6): Loop limit uses _runtimeEdgeZoneWidth (scaled int cast) instead
-    ///      of raw _edgeZoneWidth. On any canvas != 512px these diverged, making
-    ///      zone boundaries inconsistent with all other scaled values.
-    /// </summary>
     private void UpdateCursorZone()
     {
         Vector2 texturePos = ScreenToTexturePosition(Input.mousePosition);
@@ -1118,6 +850,8 @@ public class ColoringMinigame_v2 : MonoBehaviour
 
         float minDist = float.MaxValue;
         Vector2 bestDirection = Vector2.zero;
+        // WHY: _runtimeEdgeZoneWidth as loop limit — raw _edgeZoneWidth diverges from
+        //      all other scaled values on any canvas that isn't exactly 512px wide.
         int edgeStepLimit = Mathf.CeilToInt(_runtimeEdgeZoneWidth);
 
         for (int i = 0; i < _edgeSampleDirections; i++)
@@ -1193,6 +927,8 @@ public class ColoringMinigame_v2 : MonoBehaviour
     {
         int cx = Mathf.RoundToInt(center.x);
         int cy = Mathf.RoundToInt(center.y);
+        // WHY: _runtimeBrushRadius — raw _brushRadius ignores canvas scale,
+        //      causing mismatched coordinate spaces on non-512px canvases.
         int r = Mathf.CeilToInt(_runtimeBrushRadius);
 
         int xMin = Mathf.Max(0, cx - r);
@@ -1202,9 +938,9 @@ public class ColoringMinigame_v2 : MonoBehaviour
 
         if (xMax < xMin || yMax < yMin) return;
 
-        int regionW = xMax - xMin + 1;
-        int regionH = yMax - yMin + 1;
-        Color[] existingPixels = _canvasTexture.GetPixels(xMin, yMin, regionW, regionH);
+        Color[] existingPixels = _canvasTexture.GetPixels(xMin, yMin,
+                                                          xMax - xMin + 1,
+                                                          yMax - yMin + 1);
 
         for (int py = yMin; py <= yMax; py++)
             for (int px = xMin; px <= xMax; px++)
@@ -1215,30 +951,18 @@ public class ColoringMinigame_v2 : MonoBehaviour
 
                 if (dist > _runtimeBrushRadius) continue;
 
-                int flatIdx = py * _canvasWidth + px;
-
-                // WHY: Paper mask check is FIRST and SILENT — no penalty, no event.
-                //      The player is not punished for moving near the paper edge; the brush
-                //      simply doesn't apply. This models the physical constraint of the paper
-                //      without adding a second failure axis the player can't control.
-                if (_hasPaperMask && _paperMaskPixels[flatIdx].grayscale <= 0.5f)
-                    continue;
-
                 float normalizedDist = dist / _runtimeBrushRadius;
-                float alpha = Mathf.Clamp01(
-                    1f - Mathf.Pow(normalizedDist, 1f / _brushHardness)
-                );
+                float alpha = Mathf.Clamp01(1f - Mathf.Pow(normalizedDist, 1f / _brushHardness));
 
-                int localIndex = (py - yMin) * regionW + (px - xMin);
+                int localIndex = (py - yMin) * (xMax - xMin + 1) + (px - xMin);
                 Color existing = existingPixels[localIndex];
                 Color blended = Color.Lerp(existing, color, alpha);
                 blended.a = Mathf.Max(existing.a, alpha);
                 existingPixels[localIndex] = blended;
             }
 
-        _canvasTexture.SetPixels(xMin, yMin, regionW, regionH, existingPixels);
+        _canvasTexture.SetPixels(xMin, yMin, xMax - xMin + 1, yMax - yMin + 1, existingPixels);
     }
-
 
     // ============================================================
     // PROGRESS TRACKING
@@ -1260,31 +984,19 @@ public class ColoringMinigame_v2 : MonoBehaviour
             for (int x = 0; x < _canvasWidth; x += stride)
             {
                 int idx = y * _canvasWidth + x;
-
-                // WHY: If a paper mask is active, pixels outside it were never paintable
-                //      and should not skew either meter. StampBrush already blocked them,
-                //      but floating-point alpha from a previous session or edge anti-aliasing
-                //      could leave residue — gate the sample to stay consistent.
-                if (_hasPaperMask && _paperMaskPixels[idx].grayscale <= 0.5f)
-                    continue;
-
-                bool insideTShirt = _maskPixels[idx].grayscale > 0.5f;
+                bool insideMask = _maskPixels[idx].grayscale > 0.5f;
                 bool hasPaint = canvasPixels[idx].a > 0.05f;
 
                 if (!hasPaint) continue;
-
                 totalPainted++;
-                if (insideTShirt) paintedInside++;
+                if (insideMask) paintedInside++;
                 else paintedOutside++;
             }
 
         if (totalPainted > 0)
         {
-            // WHY: stride*stride subsampling underrepresents total mask pixels by factor stride².
-            //      We divide _totalMaskPixels by the same factor so the denominator matches
-            //      what we can actually observe in the strided loop.
             _paintedInsideFraction = Mathf.Clamp01((float)paintedInside /
-                                          (_totalMaskPixels / (float)(stride * stride)));
+                                          (_totalMaskPixels / (stride * stride)));
             _paintedOutsideFraction = Mathf.Clamp01((float)paintedOutside / totalPainted);
         }
         else
@@ -1307,19 +1019,15 @@ public class ColoringMinigame_v2 : MonoBehaviour
         }
     }
 
-
     private void OnComplete()
     {
-        // Stub: in production → _gameManager.ResolveMinigame(MinigameResult.Success)
         Debug.Log("[ColoringMinigame] 🎉 Transitioning to NarrativeState...");
     }
 
     private void OnFail()
     {
-        // WHY: Force _isPainting false immediately. Without this, a held LMB during
-        //      the 1.5s countdown keeps stamping paint through UpdateEffectiveCursorPos,
-        //      re-dirtying the canvas before ResetCanvas() fires and instantly
-        //      re-triggering the fail condition on the next SampleProgress() call.
+        // WHY: Force _isPainting false immediately so held LMB during the 1.5s
+        //      countdown doesn't keep stamping paint and immediately re-trigger fail.
         _isPainting = false;
         Debug.Log("[ColoringMinigame] ❌ Failed. Auto-resetting in 1.5s. Press R to reset now.");
         Invoke(nameof(ResetCanvas), 1.5f);
@@ -1337,15 +1045,10 @@ public class ColoringMinigame_v2 : MonoBehaviour
         _isPainting = false;
         _paintedInsideFraction = 0f;
         _paintedOutsideFraction = 0f;
-        _distanceTraveledThisStroke = 0f;
         _effectivePosInitialised = false;
         _smoothedVelocity = 0f;
         _currentVelocityMultiplier = 1f;
         _prevRawPosInitialised = false;
-
-        // WHY: Reset the sample timer to a full interval so SampleProgress() doesn't
-        //      fire on the very next frame after reset and immediately evaluate a
-        //      freshly cleared canvas — causing a race with the player's first stroke.
         _progressSampleTimer = _progressSampleInterval;
 
         ResetImpulseState();
@@ -1363,7 +1066,7 @@ public class ColoringMinigame_v2 : MonoBehaviour
 
         string zoneLabel = _currentZone switch
         {
-            CursorZone.Middle => "MIDDLE (curved)",
+            CursorZone.Middle => "MIDDLE (raw)",
             CursorZone.NearEdge => _isPainting
                                     ? "NEAR EDGE (resistance + impulse + jitter)"
                                     : "NEAR EDGE (calm — hover)",
@@ -1392,7 +1095,7 @@ public class ColoringMinigame_v2 : MonoBehaviour
             $"(range {_runtimeMinVelocityThreshold:F0}–{_runtimeMaxVelocityThreshold:F0} px/s)\n" +
             $"<b>Impulse:</b> {impulseLabel}\n" +
             $"<b>Resistance offset:</b> {resistNow:F1}px  " +
-            $"<b>(max {_runtimeResistanceStrength:F0}px at proximity 1.0)</b>\n" +
+            $"(max {_runtimeResistanceStrength:F0}px at proximity 1.0)\n" +
             $"<b>Painted Inside:</b>  {_paintedInsideFraction:P1} / {_completionThreshold:P0}\n" +
             $"<b>Painted Outside:</b> {_paintedOutsideFraction:P1} / {_outOfBoundsFailThreshold:P0}\n" +
             $"<b>Status:</b> {(_isComplete ? "✅ COMPLETE" : _hasFailed ? "❌ FAILED (auto-reset...)" : "Painting...")}  " +
@@ -1410,20 +1113,11 @@ public class ColoringMinigame_v2 : MonoBehaviour
         if (_canvasTexture != null) Destroy(_canvasTexture);
         if (_cursorTexture != null) Destroy(_cursorTexture);
 
-        // WHY: _maskTexture may have been created by DeriveMaskFromOutline() at runtime
-        //      (not loaded from disk), in which case it is unmanaged memory we own.
-        //      We tag it with a name in derivation so we can safely identify and destroy it.
-        //      If it was assigned from the Inspector it is a managed asset — Destroy() on
-        //      a managed asset is a no-op at runtime and harmless in-editor.
-        if (_maskTexture != null && _maskTexture.name == "DerivedInteriorMask")
-            Destroy(_maskTexture);
-
         Cursor.visible = true;
     }
 
-
     // ============================================================
-    // PUBLIC API (IState integration)
+    // PUBLIC API
     // ============================================================
 
     public bool IsComplete => _isComplete;
@@ -1437,9 +1131,6 @@ public class ColoringMinigame_v2 : MonoBehaviour
     {
         Cursor.visible = true;
         CancelInvoke(nameof(ResetCanvas));
-        // WHY: We do not own the Canvas — the scene hierarchy does.
-        //      Destroying it here would nuke the entire Minigames hierarchy.
-        //      MinigameState or scene lifecycle handles teardown.
     }
 
     // ============================================================
