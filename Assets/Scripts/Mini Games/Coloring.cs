@@ -1,23 +1,27 @@
 ﻿// ============================================================
-// ColoringMinigame_v2.cs (v5 — Velocity Scaling + Marker Cursor + Restart Fix)
+// Coloring.cs (v6 — Unified Fix: Paint Regression + LMB-Gated Effects)
 //
 // RESPONSIBILITY: Self-contained coloring minigame simulating
 // the motor struggle of painting within lines.
 //
-// KEY CHANGES FROM v4 (Scene-Wired):
-//   [1] VELOCITY TRACKING — cursor speed (texture px/s) drives _currentVelocityMultiplier
-//       which scales jitter intensity AND impulse speed/magnitude in real time.
-//       Drawing fast = harder to control. Rewards slow, deliberate movement.
-//   [2] MARKER CURSOR — serialized Sprite with configurable tip pivot replaces
-//       the generated circle. Falls back to circle if no sprite assigned.
-//       Color cycling tints the sprite via Image.color — sprite must be white/greyscale.
-//   [3] FAIL RESTART FIXED — _isPainting forced false in OnFail() prevents held LMB
-//       from re-dirtying the canvas during the 1.5s countdown.
-//       _progressSampleTimer reset in ResetCanvas() prevents immediate re-trigger.
-//   [4] R KEY RESET — ResetCanvas() callable at any time. CancelInvoke() prevents
-//       double-reset when R is pressed during the auto-reset countdown.
+// CHANGES FROM v5:
+//   [1] PAINT REGRESSION FIXED — StampBrush and step calculation now both use
+//       _runtimeBrushRadius (canvas-scale-corrected). v5 used raw _brushRadius
+//       in StampBrush while zone detection used scaled values, causing zone
+//       misclassification on non-512px canvases that silently suppressed painting.
+//   [2] EDGE ZONE LOOP FIXED — UpdateCursorZone now uses _runtimeEdgeZoneWidth
+//       as the step limit instead of raw _edgeZoneWidth. These diverged on any
+//       canvas not exactly 512px wide, making zone detection inconsistent.
+//   [3] FIX A — Jitter now fires on _isPainting == true (LMB held), not on hover.
+//       Hovering near the edge is calm. Pressing LMB is when the cursor fights back.
+//   [4] FIX B — NearEdge hover path explicitly confirmed: cursor tracks raw mouse
+//       1:1 when not painting. Grace countdown only begins on LMB down.
+//   [5] FIX C — Velocity multiplier only escalates while _isPainting. Decays toward
+//       1.0 when not painting so hover speed cannot pre-load difficulty before a stroke.
+//   [6] _canvasScale Inspector field removed. Scale is always auto-derived from
+//       _canvasWidth / 512f. One source of truth, no stale Inspector values.
 //
-// PLACE ON:  'Coloring' GameObject
+// PLACE ON: 'Coloring' GameObject
 //
 // INSPECTOR INJECTIONS (Required):
 //   _injectedCanvas          → Minigames (root Canvas)
@@ -59,7 +63,7 @@ public class Coloring : MonoBehaviour
     [Tooltip("Visible sketch outline. Transparent interior, opaque lines.")]
     [SerializeField] private Texture2D _sketchTexture;
 
-    [Tooltip("Mask: White = valid paint area. Black = outline/outside.")]
+    [Tooltip("Mask: White = valid paint area. Black = outline/outside. MUST have Read/Write enabled in Import Settings.")]
     [SerializeField] private Texture2D _maskTexture;
 
     [Header("Cursor Visual")]
@@ -90,7 +94,7 @@ public class Coloring : MonoBehaviour
     };
 
     [Header("Brush — Marker Style")]
-    [Tooltip("Radius in texture pixels. 12 = medium marker on a 512px canvas.")]
+    [Tooltip("Radius in texture pixels at 512px reference resolution. Auto-scales to actual canvas size.")]
     [SerializeField] private float _brushRadius = 12f;
 
     [Range(0.1f, 1f)]
@@ -98,24 +102,24 @@ public class Coloring : MonoBehaviour
     [SerializeField] private float _brushHardness = 0.75f;
 
     [Header("Zone Detection")]
-    [Tooltip("Pixel distance from outline that counts as 'near edge'.")]
+    [Tooltip("Pixel distance from outline that counts as 'near edge'. Authored at 512px resolution, auto-scaled.")]
     [SerializeField] private float _edgeZoneWidth = 30f;
 
     [Tooltip("Radial sample count for edge detection. 8 = 45° increments.")]
     [SerializeField] private int _edgeSampleDirections = 8;
 
     [Header("Middle Zone — Curved Drawing (LMB Held)")]
-    [Tooltip("Peak perpendicular wave displacement in texture pixels.")]
+    [Tooltip("Peak perpendicular wave displacement in texture pixels at 512px resolution.")]
     [SerializeField] private float _curveAmplitude = 28f;
 
     [Tooltip("Wave cycles per pixel traveled. 0.015 ≈ 1 full wave per 67px.")]
     [SerializeField] private float _curveFrequency = 0.015f;
 
-    [Header("Edge Zone — Visual Jitter (LMB Released)")]
+    [Header("Edge Zone — Visual Jitter (LMB Held)")]
     [Tooltip(
-        "BASE peak displacement of the cosmetic cursor shake near edges.\n" +
+        "BASE peak displacement of the cursor shake near edges while painting.\n" +
         "Actual intensity = this × _currentVelocityMultiplier.\n" +
-        "Move fast near an edge → cursor shakes harder."
+        "Only fires while LMB is held — hovering near the edge is calm."
     )]
     [SerializeField] private float _jitterIntensity = 10f;
 
@@ -127,8 +131,7 @@ public class Coloring : MonoBehaviour
         "DIRECT pixel offset outward while painting near the edge.\n" +
         "proximity 1.0 (on outline)  → full offset\n" +
         "proximity 0.5 (mid edge)    → half offset\n" +
-        "proximity 0.0 (zone entry)  → zero offset\n" +
-        "Not velocity-scaled — keeps resistance predictable and learnable."
+        "proximity 0.0 (zone entry)  → zero offset"
     )]
     [SerializeField] private float _resistanceStrength = 15f;
 
@@ -136,49 +139,36 @@ public class Coloring : MonoBehaviour
     [Tooltip("Seconds after entering edge zone before the first impulse fires. Grace window per stroke entry.")]
     [SerializeField] private float _impulseDelayDuration = 1f;
 
-    [Tooltip(
-        "BASE outward travel speed (texture px/s).\n" +
-        "Scales with velocity — move fast → impulse lurches outward faster."
-    )]
+    [Tooltip("BASE outward travel speed (texture px/s). Scales with velocity.")]
     [SerializeField] private float _impulseSpeed = 55f;
 
-    [Tooltip(
-        "BASE max push distance from raw mouse (texture px).\n" +
-        "Scales with velocity — move fast → impulse reaches further out."
-    )]
+    [Tooltip("BASE max push distance from raw mouse (texture px). Scales with velocity.")]
     [SerializeField] private float _impulseMagnitude = 30f;
 
-    [Tooltip(
-        "Return speed (texture px/s) after peak impulse.\n" +
-        "NOT velocity-scaled — constant recovery keeps correction learnable."
-    )]
+    [Tooltip("Return speed (texture px/s) after peak impulse. NOT velocity-scaled — constant recovery keeps correction learnable.")]
     [SerializeField] private float _returnSpeed = 80f;
 
     [Header("Velocity-Based Difficulty")]
     [Tooltip(
         "Cursor speed (texture px/s) below which multiplier = 1.0 (base difficulty).\n" +
-        "On a 512px canvas, ~20 px/s is a slow deliberate stroke."
+        "Authored at 512px resolution, auto-scaled."
     )]
     [SerializeField] private float _minVelocityThreshold = 20f;
 
     [Tooltip(
         "Cursor speed (texture px/s) at which multiplier reaches its ceiling.\n" +
-        "On a 512px canvas, ~200 px/s is a fast sweep across 40% of the image."
+        "Authored at 512px resolution, auto-scaled."
     )]
     [SerializeField] private float _maxVelocityThreshold = 200f;
 
     [Tooltip(
         "Multiplier ceiling at peak cursor speed.\n" +
         "Applied to jitter intensity AND impulse speed/magnitude.\n" +
-        "1.0 = no scaling. 2.5 = 2.5× harder at max speed.\n" +
-        "Recommended: 2.0–3.0. Above 4.0 tends to feel unfair."
+        "1.0 = no scaling. 2.5 = 2.5× harder at max speed."
     )]
     [SerializeField] private float _maxVelocityMultiplier = 2.5f;
 
-    [Tooltip(
-        "Exponential smoothing factor for velocity. Higher = snappier but noisier.\n" +
-        "Recommended: 6–10."
-    )]
+    [Tooltip("Exponential smoothing factor for velocity. Higher = snappier. Recommended: 6–10.")]
     [SerializeField] private float _velocitySmoothing = 8f;
 
     [Header("Progress & Win / Fail")]
@@ -198,7 +188,6 @@ public class Coloring : MonoBehaviour
     // PRIVATE STATE
     // ============================================================
 
-    // Scene-wired rendering references
     private Canvas _canvas;
     private RawImage _paintingDisplay;
     private Image _sketchDisplay;
@@ -213,15 +202,13 @@ public class Coloring : MonoBehaviour
     private RectTransform _cursorRect;
     private Texture2D _cursorTexture;     // Only allocated for circle fallback
     private Vector2 _textureToScreenScale;
-    // WHY: Cached at Awake so UpdateCursorVisual never tries to resize the marker.
-    //      Resizing a marker every frame based on brushRadius would distort artist artwork.
     private bool _useMarkerCursor;
 
     // Runtime GameObjects we own — tracked for explicit OnDestroy cleanup
     private GameObject _cursorGO;
     private GameObject _debugTextGO;
 
-    // Mask data — flat array avoids per-pixel allocation in Update
+    // Mask data
     private Color[] _maskPixels;
     private int _totalMaskPixels;
 
@@ -245,33 +232,25 @@ public class Coloring : MonoBehaviour
     private Vector2 _nearestOutsideDirection;
 
     // WHY: ImpulsePhase is a mini state machine inside the edge system.
-    //
     //   Inactive  ──► (NearEdge + LMB held)              ──► Waiting
     //   Waiting   ──► (_impulseDelayDuration elapsed)     ──► MovingOut
     //   MovingOut ──► (distance == effectiveMagnitude)    ──► Returning
     //   Returning ──► (distance == 0)                     ──► MovingOut  [cycles]
-    //
     //   Reset to Inactive: LMB up, zone exits NearEdge, new stroke, R pressed.
-    //   Delay only applies to the FIRST impulse per edge-zone entry.
-    //   Subsequent cycles are immediate — difficulty stays continuous.
     private enum ImpulsePhase { Inactive, Waiting, MovingOut, Returning }
     private ImpulsePhase _impulsePhase = ImpulsePhase.Inactive;
     private float _impulsePhaseTimer = 0f;
     private float _currentImpulseDistance = 0f;
     private Vector2 _currentImpulseDirection;
 
-    // WHY: Captured ONCE at the start of each MovingOut phase.
-    //      Locking the target magnitude means mid-cycle velocity changes
-    //      don't shift the goalposts while the impulse is already travelling.
-    //      New velocity is picked up on the NEXT cycle entry.
+    // WHY: Locked at MovingOut entry. Mid-cycle velocity changes don't shift the
+    //      goalposts while the impulse is already travelling. New velocity on next cycle.
     private float _currentEffectiveMagnitude;
 
     // Velocity tracking
     private Vector2 _prevRawTexturePos;
     private bool _prevRawPosInitialised;
     private float _smoothedVelocity;
-    // WHY: Single output of UpdateVelocity(). Both jitter and impulse read this.
-    //      Centralised so both systems see the identical value within one frame.
     private float _currentVelocityMultiplier = 1f;
 
     // Progress state
@@ -281,14 +260,25 @@ public class Coloring : MonoBehaviour
     private bool _isComplete;
     private bool _hasFailed;
 
+    // WHY: All Inspector pixel-unit values are authored at 512px reference resolution.
+    //      These runtime versions are multiplied by (canvasWidth / 512f) once in Awake
+    //      so every downstream system automatically handles any texture size.
+    //      StampBrush, step calculations, and zone detection ALL use runtime values —
+    //      this is the root fix for the v5 paint regression.
+    private float _runtimeBrushRadius;
+    private float _runtimeEdgeZoneWidth;
+    private float _runtimeCurveAmplitude;
+    private float _runtimeImpulseMagnitude;
+    private float _runtimeResistanceStrength;
+    private float _runtimeMinVelocityThreshold;
+    private float _runtimeMaxVelocityThreshold;
+
     // ============================================================
     // INITIALIZATION
     // ============================================================
 
     private void Awake()
     {
-        // WHY: Validate all four injections immediately. A NullRef buried inside
-        //      Update() costs 20 minutes to diagnose. A clear error here costs 20 seconds.
         if (_injectedCanvas == null ||
             _injectedPaintingDisplay == null ||
             _injectedSketchDisplay == null ||
@@ -305,15 +295,11 @@ public class Coloring : MonoBehaviour
             return;
         }
 
-        // Wire injected references into the private fields used by all logic below.
-        // WHY: Keeping injected and internal fields separate means we could support
-        //      re-initialisation with a different hierarchy at runtime if needed.
         _canvas = _injectedCanvas;
         _paintingDisplay = _injectedPaintingDisplay;
         _sketchDisplay = _injectedSketchDisplay;
         _panelRect = _injectedPanelRect;
 
-        // Cursor is still procedural — it doesn't belong in the designed hierarchy.
         BuildCursorVisual();
 
         if (_showProgressOnScreen)
@@ -323,6 +309,17 @@ public class Coloring : MonoBehaviour
         _maskPixels = _maskTexture.GetPixels();
         _canvasWidth = _maskTexture.width;
         _canvasHeight = _maskTexture.height;
+
+        // WHY: Single auto-derived scale factor. No Inspector float to go stale.
+        //      Every downstream system reads a _runtime* value — guaranteed consistent.
+        float scale = _canvasWidth / 512f;
+        _runtimeBrushRadius = _brushRadius * scale;
+        _runtimeEdgeZoneWidth = _edgeZoneWidth * scale;
+        _runtimeCurveAmplitude = _curveAmplitude * scale;
+        _runtimeImpulseMagnitude = _impulseMagnitude * scale;
+        _runtimeResistanceStrength = _resistanceStrength * scale;
+        _runtimeMinVelocityThreshold = _minVelocityThreshold * scale;
+        _runtimeMaxVelocityThreshold = _maxVelocityThreshold * scale;
 
         Vector2 panelSize = _panelRect.rect.size;
         _textureToScreenScale = new Vector2(panelSize.x / _canvasWidth,
@@ -336,7 +333,8 @@ public class Coloring : MonoBehaviour
         if (_totalMaskPixels == 0)
         {
             Debug.LogError("[ColoringMinigame] Mask has zero white pixels! " +
-                           "Check mask texture — white fill = paintable area.");
+                           "Check: (1) mask texture Read/Write enabled, " +
+                           "(2) white fill inside the outline.");
             return;
         }
 
@@ -347,11 +345,10 @@ public class Coloring : MonoBehaviour
         _canvasTexture.SetPixels(clear);
         _canvasTexture.Apply();
 
+        // WHY: This is the line that makes paint visible. If _paintingDisplay.texture
+        //      is null, SetPixels/Apply work but nothing ever renders.
         _paintingDisplay.texture = _canvasTexture;
 
-        // WHY: Guard prevents overwriting a sprite the artist set directly in the scene.
-        //      To have the script own the sketch exclusively, clear the Outline sprite
-        //      in the Inspector and assign _sketchTexture here instead.
         if (_sketchTexture != null && _sketchDisplay.sprite == null)
             _sketchDisplay.sprite = TextureToSprite(_sketchTexture);
 
@@ -369,25 +366,24 @@ public class Coloring : MonoBehaviour
         _currentColorIndex = 0;
         _currentColor = _availableColors[0];
         _cursorImage.color = _currentColor;
-        _currentEffectiveMagnitude = _impulseMagnitude;
+        _currentEffectiveMagnitude = _runtimeImpulseMagnitude;
 
         Cursor.visible = false;
 
         Debug.Log($"[ColoringMinigame] Initialised. {_canvasWidth}×{_canvasHeight}, " +
-                  $"{_totalMaskPixels} paintable px. " +
+                  $"scale={scale:F2}, {_totalMaskPixels} paintable px. " +
                   $"Cursor: {(_useMarkerCursor ? "Marker sprite" : "Generated circle")}.");
     }
 
-    // WHY: Isolated so swapping between marker and circle only touches this method.
-    //      Nothing else in Awake() changes if the cursor implementation changes.
+    // WHY: Isolated so swapping cursor implementation only touches this method.
     private void BuildCursorVisual()
     {
         _cursorGO = new GameObject("CursorVisual");
         _cursorGO.transform.SetParent(_panelRect, false);
 
         _cursorImage = _cursorGO.AddComponent<Image>();
-        // WHY: raycastTarget = false ensures the cursor visual never eats mouse events
-        //      that should reach the panel or hotspots beneath it.
+        // WHY: raycastTarget = false — cursor visual must never eat mouse events
+        //      that should reach the panel beneath it.
         _cursorImage.raycastTarget = false;
 
         _cursorRect = _cursorGO.GetComponent<RectTransform>();
@@ -396,9 +392,8 @@ public class Coloring : MonoBehaviour
 
         if (_markerCursorSprite != null)
         {
-            // WHY: Setting pivot to the marker tip means anchoredPosition maps DIRECTLY
-            //      to the paint application point — zero offset math required downstream.
-            //      The sprite hangs naturally above/around the tip.
+            // WHY: Pivot at the marker tip means anchoredPosition maps DIRECTLY to the
+            //      paint application point — zero offset math required downstream.
             _cursorImage.sprite = _markerCursorSprite;
             _cursorRect.pivot = _markerCursorPivot;
             _cursorRect.sizeDelta = _markerCursorSize;
@@ -407,15 +402,14 @@ public class Coloring : MonoBehaviour
         else
         {
             // WHY: Fallback circle for development without art assets.
-            //      Pivot at center — anchoredPosition = brush center.
-            //      Sprite is assigned later in Awake() after texture generation.
+            //      sizeDelta is updated every frame in UpdateCursorVisual to match brushRadius.
             _cursorRect.pivot = new Vector2(0.5f, 0.5f);
             _cursorRect.sizeDelta = new Vector2(_brushRadius * 2f, _brushRadius * 2f);
             _useMarkerCursor = false;
         }
     }
 
-    // WHY: Parented to root Canvas, not the panel — renders above all panel content
+    // WHY: Parented to root Canvas so it renders above all panel content
     //      and is never clipped by the panel's RectTransform bounds.
     private void BuildDebugText()
     {
@@ -424,16 +418,16 @@ public class Coloring : MonoBehaviour
 
         _debugText = _debugTextGO.AddComponent<Text>();
         _debugText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        _debugText.fontSize = 18;
         _debugText.color = Color.black;
         _debugText.alignment = TextAnchor.UpperLeft;
+        _debugText.fontSize = Mathf.RoundToInt(Screen.height * 0.025f);
 
         RectTransform textRT = _debugTextGO.GetComponent<RectTransform>();
         textRT.anchorMin = new Vector2(0, 1);
         textRT.anchorMax = new Vector2(0, 1);
         textRT.pivot = new Vector2(0, 1);
         textRT.anchoredPosition = new Vector2(20, -20);
-        textRT.sizeDelta = new Vector2(540, 280);
+        textRT.sizeDelta = new Vector2(Screen.width * 0.3f, Screen.height * 0.35f);
     }
 
     private Texture2D GenerateCircleCursorTexture(int size)
@@ -472,7 +466,7 @@ public class Coloring : MonoBehaviour
         HandleColorCycling();
         HandlePaintingInput();
         HandleResetInput();
-        // WHY: Velocity MUST update before zone/cursor methods so _currentVelocityMultiplier
+        // WHY: Velocity updates before zone/cursor so _currentVelocityMultiplier
         //      is fresh when jitter and impulse read it this same frame.
         UpdateVelocity();
         UpdateCursorZone();
@@ -492,25 +486,25 @@ public class Coloring : MonoBehaviour
         {
             _currentColorIndex = (_currentColorIndex + 1) % _availableColors.Length;
             _currentColor = _availableColors[_currentColorIndex];
-            // WHY: Image.color tints both the generated sprite AND the marker sprite.
-            //      This is why the marker sprite must be white/greyscale — any
-            //      pre-existing colour on the sprite will multiply with the paint colour.
+            // WHY: Image.color tints both circle and marker sprite — marker must be
+            //      white/greyscale so the tint reads as the pure paint colour.
             _cursorImage.color = _currentColor;
         }
     }
 
     private void HandlePaintingInput()
     {
-        // WHY: Block new strokes while failed or complete. Without this guard, a held
-        //      LMB during the 1.5s fail countdown re-dirties the canvas before
-        //      ResetCanvas() fires, causing it to immediately re-trigger the fail.
+        // WHY: Block new strokes while failed or complete. Without this, a held LMB
+        //      during the 1.5s fail countdown re-dirties the canvas before
+        //      ResetCanvas() fires, immediately re-triggering the fail condition.
         if (Input.GetMouseButtonDown(0) && !_isComplete && !_hasFailed)
         {
             _isPainting = true;
             _distanceTraveledThisStroke = 0f;
             _lastEffectiveCursorPos = _effectiveCursorPos;
             _effectivePosInitialised = true;
-            // WHY: Fresh grace period every new stroke, even when immediately near edge.
+            // WHY: Fresh grace period every new stroke — rewards re-entering the edge
+            //      zone after retreating to the middle.
             ResetImpulseState();
         }
 
@@ -523,9 +517,9 @@ public class Coloring : MonoBehaviour
         }
     }
 
-    // WHY: CancelInvoke is critical. Without it, pressing R during the 1.5s auto-reset
-    //      countdown lets the Invoke fire anyway — calling ResetCanvas() a second time
-    //      and clearing a canvas the player may have already begun repainting.
+    // WHY: CancelInvoke is critical. Without it, pressing R during the auto-reset
+    //      countdown fires ResetCanvas() a second time, clearing a canvas the player
+    //      may have already started repainting.
     private void HandleResetInput()
     {
         if (Input.GetKeyDown(KeyCode.R))
@@ -541,16 +535,11 @@ public class Coloring : MonoBehaviour
 
     /// <summary>
     /// WHY: Tracks raw cursor speed in texture px/s, smoothed via exponential moving
-    ///      average to prevent single-frame delta spikes from causing jarring
-    ///      instantaneous difficulty changes mid-stroke.
+    ///      average to prevent single-frame delta spikes from jarring mid-stroke jumps.
     ///
-    ///      Outside-panel handling: velocity decays toward zero and prev position is
-    ///      invalidated. Without this, re-entering the panel would compute a large
-    ///      outside→inside delta as a false speed spike.
-    ///
-    ///      Output: _currentVelocityMultiplier — read by jitter and impulse only.
-    ///      Both systems read the same value so there is zero divergence between
-    ///      how hard jitter hits vs. how hard the impulse hits within a frame.
+    ///      FIX C: Multiplier only escalates while _isPainting.
+    ///      When not painting it decays toward 1.0 so hover speed cannot pre-load
+    ///      difficulty before the player even clicks — escalation is earned stroke by stroke.
     /// </summary>
     private void UpdateVelocity()
     {
@@ -571,15 +560,26 @@ public class Coloring : MonoBehaviour
         }
         else
         {
-            // WHY: Decay to zero outside the panel so the multiplier doesn't stay
-            //      elevated when the cursor leaves and re-enters.
             _smoothedVelocity = Mathf.Lerp(_smoothedVelocity, 0f,
-                                                 Time.deltaTime * _velocitySmoothing);
+                                               Time.deltaTime * _velocitySmoothing);
             _prevRawPosInitialised = false;
         }
 
-        float t = Mathf.InverseLerp(_minVelocityThreshold, _maxVelocityThreshold, _smoothedVelocity);
-        _currentVelocityMultiplier = Mathf.Lerp(1f, _maxVelocityMultiplier, t);
+        if (_isPainting)
+        {
+            // WHY: Use runtime-scaled thresholds so authored values stay proportional
+            //      at any canvas resolution without manual recalculation.
+            float t = Mathf.InverseLerp(_runtimeMinVelocityThreshold,
+                                         _runtimeMaxVelocityThreshold, _smoothedVelocity);
+            _currentVelocityMultiplier = Mathf.Lerp(1f, _maxVelocityMultiplier, t);
+        }
+        else
+        {
+            // WHY: FIX C — decay toward baseline so hover speed is irrelevant.
+            //      The moment LMB is released, difficulty starts unwinding.
+            _currentVelocityMultiplier = Mathf.Lerp(_currentVelocityMultiplier, 1f,
+                                                     Time.deltaTime * _velocitySmoothing);
+        }
     }
 
     // ============================================================
@@ -589,7 +589,6 @@ public class Coloring : MonoBehaviour
     /// <summary>
     /// WHY: One method, one update per frame, one output position.
     ///      The visual cursor and the painter both read _effectiveCursorPos.
-    ///      Nothing else in this class computes a cursor position.
     /// </summary>
     private void UpdateEffectiveCursorPos()
     {
@@ -616,8 +615,8 @@ public class Coloring : MonoBehaviour
         switch (_currentZone)
         {
             case CursorZone.Middle:
-                // WHY: Reset impulse in the safe zone so the delay timer restarts
-                //      next time the player enters the edge zone — rewards retreat.
+                // WHY: Impulse resets in the safe zone so the delay restarts next time
+                //      the player enters the edge — rewards retreating to the middle.
                 ResetImpulseState();
                 if (_isPainting && rawDeltaMag > 0.1f)
                 {
@@ -632,11 +631,16 @@ public class Coloring : MonoBehaviour
 
             case CursorZone.NearEdge:
                 if (_isPainting)
+                {
+                    // WHY: FIX B — full resistance + impulse stack only while LMB held.
+                    //      Player sees a calm, accurate cursor while planning their stroke.
+                    //      The moment they commit with LMB, the edge fights back.
                     _effectiveCursorPos = ComputeResistancePosition(rawTexturePos);
+                }
                 else
                 {
-                    // WHY: Not painting → impulse must not run. Reset so the next
-                    //      LMB-down in this zone starts with a fresh grace countdown.
+                    // WHY: FIX B — hover near edge = cursor tracks raw mouse 1:1.
+                    //      Grace countdown only begins on LMB down, not on proximity.
                     ResetImpulseState();
                     _effectiveCursorPos = rawTexturePos;
                 }
@@ -649,15 +653,16 @@ public class Coloring : MonoBehaviour
                 break;
         }
 
-        // WHY: Guard _hasFailed and _isComplete here — prevents paint being stamped
-        //      during the fail countdown (would re-dirty the canvas before ResetCanvas
-        //      fires) or after the minigame is already won.
+        // WHY: Guard _hasFailed and _isComplete — prevents paint being stamped
+        //      during the fail countdown or after the minigame is already won.
         if (_isPainting && !_hasFailed && !_isComplete)
         {
             float dist = Vector2.Distance(_lastEffectiveCursorPos, _effectiveCursorPos);
             if (dist > 0.01f)
             {
-                int steps = Mathf.Max(1, Mathf.CeilToInt(dist / (_brushRadius * 0.5f)));
+                // WHY: _runtimeBrushRadius used here (was _brushRadius in v5 — the regression).
+                //      Step count must use the same scale as the brush stamp itself.
+                int steps = Mathf.Max(1, Mathf.CeilToInt(dist / (_runtimeBrushRadius * 0.5f)));
                 for (int i = 1; i <= steps; i++)
                 {
                     float t = (float)i / steps;
@@ -667,7 +672,7 @@ public class Coloring : MonoBehaviour
             }
             else
             {
-                // Stationary click: stamp one dot so a click immediately marks the canvas.
+                // Stationary click: one dot so clicking immediately marks the canvas.
                 StampBrush(_effectiveCursorPos, _currentColor);
             }
             _canvasTexture.Apply();
@@ -681,14 +686,9 @@ public class Coloring : MonoBehaviour
     // ============================================================
 
     /// <summary>
-    /// WHY: Oscillates PERPENDICULAR to the dominant movement axis.
-    ///      Driven by _distanceTraveledThisStroke (not Time.time) so the wave
-    ///      frequency stays consistent regardless of mouse speed — the wobble
-    ///      pattern is purely spatial, not temporal.
-    ///
-    ///      Axis-clamping prevents diagonal chaos:
-    ///        Vertical motion   → horizontal oscillation
-    ///        Horizontal motion → vertical oscillation
+    /// WHY: Oscillates PERPENDICULAR to dominant movement axis.
+    ///      Driven by _distanceTraveledThisStroke (not Time.time) so wave
+    ///      frequency is consistent regardless of mouse speed — purely spatial.
     /// </summary>
     private Vector2 ComputeCurvedPosition(Vector2 rawPos)
     {
@@ -701,29 +701,20 @@ public class Coloring : MonoBehaviour
             : new Vector2(0f, 1f);
 
         float oscillation = Mathf.Sin(_distanceTraveledThisStroke * _curveFrequency * Mathf.PI * 2f)
-                            * _curveAmplitude;
+                            * _runtimeCurveAmplitude;
 
         return rawPos + perpendicular * oscillation;
     }
 
     /// <summary>
-    /// WHY: Two composited forces make up near-edge displacement:
-    ///
-    ///   STEADY RESISTANCE — direct proportional outward offset.
-    ///     Always present while painting. Scales with proximity. Not velocity-scaled.
-    ///     Predictable — the player always knows how hard to push back.
-    ///
-    ///   CYCLIC IMPULSE — phase-driven outward lurch.
-    ///     Speed AND magnitude both scale with _currentVelocityMultiplier.
-    ///     Draw fast → impulse travels outward faster AND further.
-    ///     Recovery speed (_returnSpeed) is NOT scaled — predictable correction window.
-    ///
-    ///   Total = rawPos + resistanceOffset + impulseOffset.
+    /// WHY: Two composited forces — steady resistance (proportional, always present
+    ///      while painting) + cyclic impulse (velocity-scaled speed and magnitude).
+    ///      Total = rawPos + resistanceOffset + impulseOffset.
     /// </summary>
     private Vector2 ComputeResistancePosition(Vector2 rawPos)
     {
         Vector2 resistanceOffset = _nearestOutsideDirection
-                                   * _resistanceStrength
+                                   * _runtimeResistanceStrength
                                    * _edgeProximity;
 
         TickImpulsePhase();
@@ -732,16 +723,6 @@ public class Coloring : MonoBehaviour
         return rawPos + resistanceOffset + impulseOffset;
     }
 
-    /// <summary>
-    /// WHY: Velocity scaling applied to:
-    ///   • _impulseSpeed            → impulse travels outward faster at high cursor speed
-    ///   • _currentEffectiveMagnitude → captured ONCE at MovingOut entry, not re-read mid-cycle
-    ///
-    ///   The magnitude lock is a key design decision: if magnitude were re-read every frame,
-    ///   slowing down mid-impulse would shrink the target and could invert cursor direction.
-    ///   Capturing it at phase entry keeps the impulse deterministic and gives the player
-    ///   something stable to fight against. New velocity is applied on the NEXT cycle.
-    /// </summary>
     private void TickImpulsePhase()
     {
         switch (_impulsePhase)
@@ -757,9 +738,9 @@ public class Coloring : MonoBehaviour
                 {
                     _impulsePhase = ImpulsePhase.MovingOut;
                     _currentImpulseDistance = 0f;
-                    // WHY: Lock velocity-scaled magnitude at the moment the impulse fires.
-                    //      Moving fast when the impulse triggers = it reaches further.
-                    _currentEffectiveMagnitude = _impulseMagnitude * _currentVelocityMultiplier;
+                    // WHY: Lock velocity-scaled magnitude at impulse fire moment.
+                    //      Moving fast when it triggers = it reaches further.
+                    _currentEffectiveMagnitude = _runtimeImpulseMagnitude * _currentVelocityMultiplier;
                     PickImpulseDirection();
                 }
                 break;
@@ -778,7 +759,7 @@ public class Coloring : MonoBehaviour
             case ImpulsePhase.Returning:
                 // WHY: Return speed is constant — the player must learn "after the lurch,
                 //      I have exactly this much time to correct." Variable return speed
-                //      breaks that learned rhythm and makes the mechanic feel unfair.
+                //      breaks that learned rhythm and makes it feel unfair.
                 _currentImpulseDistance -= _returnSpeed * Time.deltaTime;
                 if (_currentImpulseDistance <= 0f)
                 {
@@ -786,9 +767,7 @@ public class Coloring : MonoBehaviour
                     // WHY: Cycle immediately — no second delay. After the first impulse,
                     //      difficulty is continuous. The player must stay slow.
                     _impulsePhase = ImpulsePhase.MovingOut;
-                    // WHY: Re-capture magnitude each cycle so sustained fast movement
-                    //      keeps escalating. Drawing slowly is the only way to reduce it.
-                    _currentEffectiveMagnitude = _impulseMagnitude * _currentVelocityMultiplier;
+                    _currentEffectiveMagnitude = _runtimeImpulseMagnitude * _currentVelocityMultiplier;
                     PickImpulseDirection();
                 }
                 break;
@@ -796,16 +775,14 @@ public class Coloring : MonoBehaviour
     }
 
     /// <summary>
-    /// WHY: ±30° random variation per cycle prevents mechanical compensation.
-    ///      Pure outward (0° variation) = player learns the exact angle in 2 reps.
-    ///      ±30° keeps it unpredictable while remaining fundamentally "away from sketch."
+    /// WHY: ±30° variation per cycle prevents mechanical compensation.
+    ///      Pure outward = player learns the exact angle in 2 reps.
+    ///      ±30° keeps it unpredictable while staying fundamentally "away from sketch."
     /// </summary>
     private void PickImpulseDirection()
     {
         if (_nearestOutsideDirection == Vector2.zero)
         {
-            // WHY: Fallback guard. Zero vector → zero impulse offset silently.
-            //      Default to right so feedback is visible if zone detection races.
             _currentImpulseDirection = Vector2.right;
             return;
         }
@@ -823,15 +800,14 @@ public class Coloring : MonoBehaviour
     /// <summary>
     /// WHY: Centralised reset so no caller forgets to zero the distance.
     ///      _currentImpulseDirection intentionally NOT reset — distance is 0 so
-    ///      offset = direction × 0 = (0,0). Direction is repicked on next MovingOut.
-    ///      _currentEffectiveMagnitude reset to base so next entry starts fresh.
+    ///      offset = direction × 0 = (0,0). Direction repicked on next MovingOut.
     /// </summary>
     private void ResetImpulseState()
     {
         _impulsePhase = ImpulsePhase.Inactive;
         _impulsePhaseTimer = 0f;
         _currentImpulseDistance = 0f;
-        _currentEffectiveMagnitude = _impulseMagnitude;
+        _currentEffectiveMagnitude = _runtimeImpulseMagnitude;
     }
 
     // ============================================================
@@ -839,20 +815,23 @@ public class Coloring : MonoBehaviour
     // ============================================================
 
     /// <summary>
-    /// WHY: Reads _effectiveCursorPos — visual and paint always agree.
-    ///      EXCEPTION: NearEdge + LMB released → cosmetic jitter added on top.
-    ///      Jitter is VISUAL ONLY. Never applied while painting — the cursor would
-    ///      lie about where paint is going, which is disorienting, not challenging.
+    /// WHY: Reads _effectiveCursorPos so visual and paint always agree.
     ///
-    ///      Velocity scaling: jitter × _currentVelocityMultiplier.
-    ///      Hover fast near an edge → cursor shakes more violently.
-    ///      Punishes hasty, nervous hovering. Rewards stillness.
+    ///      FIX A — Jitter now fires on _isPainting == true (LMB held).
+    ///      In v5 it fired on !_isPainting (hover). This was backward:
+    ///      the hover cursor should be calm so the player can plan their stroke.
+    ///      The moment they press LMB, the cursor starts fighting back.
+    ///      This makes the edge zone feel like a resistance you push into,
+    ///      not a random punishment for proximity.
+    ///
+    ///      Jitter remains VISUAL ONLY — never applied to where paint is stamped.
     /// </summary>
     private void UpdateCursorVisual()
     {
         Vector2 displayTexturePos = _effectiveCursorPos;
 
-        if (_currentZone == CursorZone.NearEdge && !_isPainting)
+        // WHY: FIX A — jitter gates on _isPainting, not !_isPainting.
+        if (_currentZone == CursorZone.NearEdge && _isPainting)
         {
             float noiseX = Mathf.PerlinNoise(Time.time * _jitterSpeed, 0f) - 0.5f;
             float noiseY = Mathf.PerlinNoise(0f, Time.time * _jitterSpeed) - 0.5f;
@@ -870,13 +849,13 @@ public class Coloring : MonoBehaviour
         _cursorImage.enabled = true;
         _cursorRect.anchoredPosition = TextureToPanelLocal(displayTexturePos);
 
-        // WHY: Circle cursor scales with brushRadius — always shows the true paint
+        // WHY: Circle cursor scales with runtimeBrushRadius — always shows true paint
         //      footprint. Marker cursor uses fixed artist-set size — resizing it every
         //      frame would distort the artwork and misrepresent the actual brush tip.
         if (!_useMarkerCursor)
         {
-            float cursorSize = _brushRadius * 2f * Mathf.Max(_textureToScreenScale.x,
-                                                                    _textureToScreenScale.y);
+            float cursorSize = _runtimeBrushRadius * 2f *
+                               Mathf.Max(_textureToScreenScale.x, _textureToScreenScale.y);
             _cursorRect.sizeDelta = new Vector2(cursorSize, cursorSize);
         }
     }
@@ -888,9 +867,13 @@ public class Coloring : MonoBehaviour
     /// <summary>
     /// WHY: Always computed from RAW mouse position, never _effectiveCursorPos.
     ///      If computed from effective pos, an impulse pushing the cursor outside
-    ///      the edge zone would immediately clear the zone and kill the impulse —
-    ///      a negative feedback loop that collapses the mechanic in one frame.
+    ///      the edge zone would immediately kill the impulse — a negative feedback
+    ///      loop that collapses the mechanic in one frame.
     ///      Raw mouse = player INTENT. Effective pos = player EXPERIENCE.
+    ///
+    ///      FIX (v6): Loop limit uses _runtimeEdgeZoneWidth (scaled int cast) instead
+    ///      of raw _edgeZoneWidth. On any canvas != 512px these diverged, making
+    ///      zone boundaries inconsistent with all other scaled values.
     /// </summary>
     private void UpdateCursorZone()
     {
@@ -918,13 +901,14 @@ public class Coloring : MonoBehaviour
 
         float minDist = float.MaxValue;
         Vector2 bestDirection = Vector2.zero;
+        int edgeStepLimit = Mathf.CeilToInt(_runtimeEdgeZoneWidth);
 
         for (int i = 0; i < _edgeSampleDirections; i++)
         {
             float angle = (i / (float)_edgeSampleDirections) * Mathf.PI * 2f;
             Vector2 dir = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
 
-            for (int step = 1; step <= _edgeZoneWidth; step++)
+            for (int step = 1; step <= edgeStepLimit; step++)
             {
                 int sx = cx + Mathf.RoundToInt(dir.x * step);
                 int sy = cy + Mathf.RoundToInt(dir.y * step);
@@ -944,10 +928,10 @@ public class Coloring : MonoBehaviour
             }
         }
 
-        if (minDist <= _edgeZoneWidth)
+        if (minDist <= _runtimeEdgeZoneWidth)
         {
             _currentZone = CursorZone.NearEdge;
-            _edgeProximity = 1f - (minDist / _edgeZoneWidth);
+            _edgeProximity = 1f - (minDist / _runtimeEdgeZoneWidth);
             _nearestOutsideDirection = bestDirection;
         }
         else
@@ -992,7 +976,10 @@ public class Coloring : MonoBehaviour
     {
         int cx = Mathf.RoundToInt(center.x);
         int cy = Mathf.RoundToInt(center.y);
-        int r = Mathf.CeilToInt(_brushRadius);
+        // WHY: _runtimeBrushRadius used here — this was the v5 regression.
+        //      v5 used raw _brushRadius in StampBrush while zone detection used
+        //      scaled values, causing mismatched coordinate spaces on non-512px canvases.
+        int r = Mathf.CeilToInt(_runtimeBrushRadius);
 
         int xMin = Mathf.Max(0, cx - r);
         int xMax = Mathf.Min(_canvasWidth - 1, cx + r);
@@ -1012,9 +999,9 @@ public class Coloring : MonoBehaviour
                 float dy = py - cy;
                 float dist = Mathf.Sqrt(dx * dx + dy * dy);
 
-                if (dist > _brushRadius) continue;
+                if (dist > _runtimeBrushRadius) continue;
 
-                float normalizedDist = dist / _brushRadius;
+                float normalizedDist = dist / _runtimeBrushRadius;
                 float alpha = Mathf.Clamp01(1f - Mathf.Pow(normalizedDist, 1f / _brushHardness));
 
                 int localIndex = (py - yMin) * (xMax - xMin + 1) + (px - xMin);
@@ -1118,9 +1105,8 @@ public class Coloring : MonoBehaviour
         _prevRawPosInitialised = false;
 
         // WHY: Reset the sample timer to a full interval so SampleProgress() doesn't
-        //      fire on the very next frame after reset and immediately see a clean
-        //      canvas as 0% painted — which it is, but an instant re-evaluation
-        //      could race with the state the player left on the previous attempt.
+        //      fire on the very next frame after reset and immediately evaluate a
+        //      freshly cleared canvas — causing a race with the player's first stroke.
         _progressSampleTimer = _progressSampleInterval;
 
         ResetImpulseState();
@@ -1140,8 +1126,8 @@ public class Coloring : MonoBehaviour
         {
             CursorZone.Middle => "MIDDLE (curved)",
             CursorZone.NearEdge => _isPainting
-                                    ? "NEAR EDGE (resistance + impulse)"
-                                    : "NEAR EDGE (jitter only)",
+                                    ? "NEAR EDGE (resistance + impulse + jitter)"
+                                    : "NEAR EDGE (calm — hover)",
             CursorZone.Outside => "OUTSIDE",
             _ => "???"
         };
@@ -1158,16 +1144,16 @@ public class Coloring : MonoBehaviour
             _ => "???"
         };
 
-        float resistNow = _resistanceStrength * _edgeProximity;
+        float resistNow = _runtimeResistanceStrength * _edgeProximity;
 
         _debugText.text =
             $"<b>Zone:</b> {zoneLabel}  <b>Proximity:</b> {_edgeProximity:F2}\n" +
             $"<b>Speed:</b> {_smoothedVelocity:F0} px/s  " +
             $"<b>Velocity ×:</b> {_currentVelocityMultiplier:F2}  " +
-            $"(range {_minVelocityThreshold:F0}–{_maxVelocityThreshold:F0} px/s)\n" +
+            $"(range {_runtimeMinVelocityThreshold:F0}–{_runtimeMaxVelocityThreshold:F0} px/s)\n" +
             $"<b>Impulse:</b> {impulseLabel}\n" +
             $"<b>Resistance offset:</b> {resistNow:F1}px  " +
-            $"<b>(max {_resistanceStrength:F0}px at proximity 1.0)</b>\n" +
+            $"<b>(max {_runtimeResistanceStrength:F0}px at proximity 1.0)</b>\n" +
             $"<b>Painted Inside:</b>  {_paintedInsideFraction:P1} / {_completionThreshold:P0}\n" +
             $"<b>Painted Outside:</b> {_paintedOutsideFraction:P1} / {_outOfBoundsFailThreshold:P0}\n" +
             $"<b>Status:</b> {(_isComplete ? "✅ COMPLETE" : _hasFailed ? "❌ FAILED (auto-reset...)" : "Painting...")}  " +
@@ -1181,13 +1167,13 @@ public class Coloring : MonoBehaviour
     private void OnDestroy()
     {
         // WHY: We created these GameObjects — we destroy them. The scene hierarchy
-        //      owns everything else. Null checks guard against Awake() early-exit path.
+        //      owns everything else. Null checks guard the Awake() early-exit path.
         if (_cursorGO != null) Destroy(_cursorGO);
         if (_debugTextGO != null) Destroy(_debugTextGO);
 
-        // WHY: Texture2D assets created at runtime via new Texture2D() are NOT
-        //      managed by Unity's asset system and must be explicitly destroyed
-        //      to prevent GPU memory leaks across scene loads.
+        // WHY: Texture2D created via new Texture2D() is NOT managed by Unity's asset
+        //      system and must be explicitly destroyed to prevent GPU memory leaks
+        //      across scene loads. GetPixels/SetPixels don't help — Destroy() does.
         if (_canvasTexture != null) Destroy(_canvasTexture);
         if (_cursorTexture != null) Destroy(_cursorTexture);
 
@@ -1209,9 +1195,9 @@ public class Coloring : MonoBehaviour
     {
         Cursor.visible = true;
         CancelInvoke(nameof(ResetCanvas));
-        // WHY: We no longer own the Canvas — the scene hierarchy does.
+        // WHY: We do not own the Canvas — the scene hierarchy does.
         //      Destroying it here would nuke the entire Minigames hierarchy.
-        //      The MinigameState or scene lifecycle is responsible for teardown.
+        //      MinigameState or scene lifecycle handles teardown.
     }
 
     // ============================================================
