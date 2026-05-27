@@ -27,7 +27,7 @@ RectTransform:
   m_GameObject: {fileID: 3764209131761295279}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalScale: {x: 1, y: 1, z: 0}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 5900487688911964095}
@@ -64,13 +64,13 @@ MonoBehaviour:
   _injectedPaintingDisplay: {fileID: 4103233592986376043}
   _injectedSketchDisplay: {fileID: 3512113369176914567}
   _injectedPanelRect: {fileID: 5900487688911964095}
-  _sketchTexture: {fileID: 2800000, guid: 81b98b12c289ecc41b2dba5350a6da8b, type: 3}
+  _sketchTexture: {fileID: 2800000, guid: 3d1f3f881f741054897ea9de443caf27, type: 3}
   _maskTexture: {fileID: 0}
   _paperMaskTexture: {fileID: 2800000, guid: c688f515cf770e64a93ddfbbb1ecf0e5, type: 3}
   _referenceResolution: 4096
-  _markerCursorSprite: {fileID: 21300000, guid: 2de9220626211af448b1648dd014d38e, type: 3}
+  _markerCursorSprite: {fileID: 21300000, guid: 18f70fc2994320c49b4a15de1c193c17, type: 3}
   _markerCursorPivot: {x: 0, y: 1}
-  _markerCursorSize: {x: 50, y: 50}
+  _markerCursorSize: {x: 128, y: 128}
   _availableColors:
   - {r: 1, g: 0.15, b: 0.15, a: 1}
   - {r: 0.15, g: 0.6, b: 0.15, a: 1}
@@ -238,7 +238,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 21300000, guid: 81b98b12c289ecc41b2dba5350a6da8b, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 3d1f3f881f741054897ea9de443caf27, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -313,7 +313,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Texture: {fileID: 2800000, guid: 5bb81ab8a8fd33b4c82b6ab3f5fde831, type: 3}
+  m_Texture: {fileID: 2800000, guid: 52475f00928d4c84c945e53d779aa6cd, type: 3}
   m_UVRect:
     serializedVersion: 2
     x: 0
