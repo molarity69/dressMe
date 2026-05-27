@@ -3,7 +3,14 @@ guid: 607d1067d92ff81448bfbeae57b60b90
 MonoImporter:
   externalObjects: {}
   serializedVersion: 2
-  defaultReferences: []
+  defaultReferences:
+  - _injectedCanvas: {instanceID: 0}
+  - _injectedPaintingDisplay: {instanceID: 0}
+  - _injectedSketchDisplay: {instanceID: 0}
+  - _injectedPanelRect: {instanceID: 0}
+  - _sketchTexture: {fileID: 2800000, guid: 81b98b12c289ecc41b2dba5350a6da8b, type: 3}
+  - _maskTexture: {fileID: 2800000, guid: 5bb81ab8a8fd33b4c82b6ab3f5fde831, type: 3}
+  - _markerCursorSprite: {instanceID: 0}
   executionOrder: 0
   icon: {instanceID: 0}
   userData: 
