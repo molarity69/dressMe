@@ -18,6 +18,7 @@ public class GameManager : MonoBehaviour
     [Header("Audio")]
     [SerializeField] private AudioManager _audioManager;
     [SerializeField] private AudioClip _mainMenuMusic;
+    [SerializeField] private AudioClip _citySounds;
 
     private GameState _currentState = GameState.MainMenu;
     private int _currentLevelIndex = 0;
@@ -39,6 +40,8 @@ public class GameManager : MonoBehaviour
         {
             OnMainMenuAnimationComplete();
         }
+        if (_audioManager != null)
+            _audioManager.FadeOutBGM(5.0f);
     }
 
     private void OnMainMenuAnimationComplete()
@@ -46,7 +49,7 @@ public class GameManager : MonoBehaviour
         if (_mainMenuObject != null)
             _mainMenuObject.SetActive(false);
         if (_audioManager != null)
-            _audioManager.FadeOutBGM(5.0f);
+            _audioManager.PlayLoop(_citySounds);
         TransitionToState(GameState.Narrative);
     }
 
