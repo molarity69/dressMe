@@ -1,57 +1,54 @@
 ﻿// ============================================================
-// ColoringMinigame_v2.cs (v3 — Scene-Wired)
+// ColoringMinigame_v2.cs (v5 — Velocity Scaling + Marker Cursor + Restart Fix)
 //
 // RESPONSIBILITY: Self-contained coloring minigame simulating
 // the motor struggle of painting within lines.
 //
-// CHANGES FROM STANDALONE v3:
-//   [1] BuildUI() removed entirely. Script no longer owns UI construction.
-//   [2] Four serialized injection fields replace all procedural UI creation.
-//   [3] Awake() validates injections immediately, then wires them into
-//       the private fields the rest of the script already uses.
-//       Zero changes to any logic below Awake().
-//   [4] BuildCursorVisual() and BuildDebugText() extracted from BuildUI()
-//       as focused helpers — cursor is still procedural (runtime circle),
-//       debug text is still optional and runtime-generated.
-//   [5] Exit() no longer destroys the Canvas — it doesn't own it anymore.
+// KEY CHANGES FROM v4 (Scene-Wired):
+//   [1] VELOCITY TRACKING — cursor speed (texture px/s) drives _currentVelocityMultiplier
+//       which scales jitter intensity AND impulse speed/magnitude in real time.
+//       Drawing fast = harder to control. Rewards slow, deliberate movement.
+//   [2] MARKER CURSOR — serialized Sprite with configurable tip pivot replaces
+//       the generated circle. Falls back to circle if no sprite assigned.
+//       Color cycling tints the sprite via Image.color — sprite must be white/greyscale.
+//   [3] FAIL RESTART FIXED — _isPainting forced false in OnFail() prevents held LMB
+//       from re-dirtying the canvas during the 1.5s countdown.
+//       _progressSampleTimer reset in ResetCanvas() prevents immediate re-trigger.
+//   [4] R KEY RESET — ResetCanvas() callable at any time. CancelInvoke() prevents
+//       double-reset when R is pressed during the auto-reset countdown.
 //
-// CONSUMERS: GameBootstrapper → MinigameState → this component.
-//            Place on the 'Coloring' GameObject.
+// PLACE ON:  'Coloring' GameObject
 //
-// DEPENDS ON (Inspector Injection):
-//   _injectedCanvas          → Minigames (root Canvas GameObject)
+// INSPECTOR INJECTIONS (Required):
+//   _injectedCanvas          → Minigames (root Canvas)
 //   _injectedPaintingDisplay → Color Area (must be RawImage, NOT Image)
 //   _injectedSketchDisplay   → Outline (Image component)
 //   _injectedPanelRect       → Coloring (its own RectTransform)
-//
-// DEPENDS ON (Script Fields):
-//   _sketchTexture           → Outline PNG (transparent bg, opaque lines)
-//   _maskTexture             → Mask PNG (white fill = paintable area)
 // ============================================================
 
 using UnityEngine;
 using UnityEngine.UI;
 
-public class ColoringMinigame_v2 : MonoBehaviour
+public class Coloring : MonoBehaviour
 {
     // ============================================================
     // SCENE REFERENCES — Injected via Inspector
-    // WHY: Script no longer owns UI construction. It receives the
-    //      pre-built hierarchy and operates on it. Zero coupling
-    //      to scene structure beyond these four explicit entry points.
+    // WHY: Script owns zero UI construction. It receives the pre-built
+    //      hierarchy and operates on it. All dependencies are explicit
+    //      and fail loudly in Awake() if missing.
     // ============================================================
 
     [Header("Scene References (Required)")]
-    [Tooltip("The root Canvas (Minigames GameObject). Needed for ScreenPointToLocalPointInRectangle world camera lookup.")]
+    [Tooltip("Root Canvas (Minigames). Required for ScreenPointToLocalPointInRectangle world camera lookup.")]
     [SerializeField] private Canvas _injectedCanvas;
 
-    [Tooltip("The RawImage on 'Color Area'. MUST be RawImage — receives the paint Texture2D at runtime. Remove the Image component and replace it with RawImage.")]
+    [Tooltip("RawImage on 'Color Area'. MUST be RawImage — receives paint Texture2D at runtime.")]
     [SerializeField] private RawImage _injectedPaintingDisplay;
 
-    [Tooltip("The Image on 'Outline'. Receives the sketch sprite if not already assigned.")]
+    [Tooltip("Image on 'Outline'. Receives sketch sprite only if no sprite is already assigned.")]
     [SerializeField] private Image _injectedSketchDisplay;
 
-    [Tooltip("The RectTransform of 'Coloring' (this GameObject). Used as the panel bounds for coordinate mapping.")]
+    [Tooltip("RectTransform of 'Coloring' (this GameObject). Panel bounds for coordinate mapping.")]
     [SerializeField] private RectTransform _injectedPanelRect;
 
     // ============================================================
@@ -59,19 +56,37 @@ public class ColoringMinigame_v2 : MonoBehaviour
     // ============================================================
 
     [Header("Textures (Required)")]
-    [Tooltip("Visible sketch outline. Transparent interior, opaque black outline.")]
+    [Tooltip("Visible sketch outline. Transparent interior, opaque lines.")]
     [SerializeField] private Texture2D _sketchTexture;
 
-    [Tooltip("Mask: White pixels = valid paint area. Black = outside/outline.")]
+    [Tooltip("Mask: White = valid paint area. Black = outline/outside.")]
     [SerializeField] private Texture2D _maskTexture;
+
+    [Header("Cursor Visual")]
+    [Tooltip(
+        "Optional marker sprite. If assigned, replaces the generated circle.\n" +
+        "CRITICAL: Sprite MUST be white or greyscale — color cycling applies via Image.color tint.\n" +
+        "A pre-coloured sprite will mix its colour with the selected paint colour."
+    )]
+    [SerializeField] private Sprite _markerCursorSprite;
+
+    [Tooltip(
+        "Normalized UV of the marker tip on the sprite.\n" +
+        "(0.5, 0.0) = bottom-center tip  |  (0.0, 0.0) = bottom-left tip\n" +
+        "This pivot is WHERE PAINT IS APPLIED — match it to the physical tip on your artwork."
+    )]
+    [SerializeField] private Vector2 _markerCursorPivot = new Vector2(0.5f, 0f);
+
+    [Tooltip("Display size of the marker in panel pixels. Only used when a marker sprite is assigned.")]
+    [SerializeField] private Vector2 _markerCursorSize = new Vector2(30f, 60f);
 
     [Header("Colors (Cycle with RMB)")]
     [SerializeField]
     private Color[] _availableColors = new Color[]
     {
-        new Color(1f, 0.15f, 0.15f, 1f),
+        new Color(1f,    0.15f, 0.15f, 1f),
         new Color(0.15f, 0.6f,  0.15f, 1f),
-        new Color(0.15f, 0.3f,  1f,   1f),
+        new Color(0.15f, 0.3f,  1f,    1f),
     };
 
     [Header("Brush — Marker Style")]
@@ -97,39 +112,74 @@ public class ColoringMinigame_v2 : MonoBehaviour
     [SerializeField] private float _curveFrequency = 0.015f;
 
     [Header("Edge Zone — Visual Jitter (LMB Released)")]
-    [Tooltip("Peak displacement of the cosmetic-only cursor shake when hovering near edge.")]
+    [Tooltip(
+        "BASE peak displacement of the cosmetic cursor shake near edges.\n" +
+        "Actual intensity = this × _currentVelocityMultiplier.\n" +
+        "Move fast near an edge → cursor shakes harder."
+    )]
     [SerializeField] private float _jitterIntensity = 10f;
 
-    [Tooltip("How fast the Perlin noise cycles. Higher = faster shake.")]
+    [Tooltip("Perlin noise cycle speed. Higher = faster shake.")]
     [SerializeField] private float _jitterSpeed = 18f;
 
     [Header("Edge Zone — Steady Resistance (LMB Held)")]
     [Tooltip(
-        "DIRECT pixel offset applied outward while painting near the edge.\n" +
-        "At proximity = 1.0 (right on the outline): cursor displaced by THIS many pixels.\n" +
-        "At proximity = 0.5 (mid edge zone):         cursor displaced by HALF this.\n" +
-        "At proximity = 0.0 (entering edge zone):    no displacement.\n" +
-        "Think of it as ambient pen-weight friction. Always present. Always proportional.\n" +
-        "Start at 10–20. Above 40 starts to feel unfair."
+        "DIRECT pixel offset outward while painting near the edge.\n" +
+        "proximity 1.0 (on outline)  → full offset\n" +
+        "proximity 0.5 (mid edge)    → half offset\n" +
+        "proximity 0.0 (zone entry)  → zero offset\n" +
+        "Not velocity-scaled — keeps resistance predictable and learnable."
     )]
     [SerializeField] private float _resistanceStrength = 15f;
 
     [Header("Edge Zone — Cyclic Impulse (LMB Held)")]
-    [Tooltip("Seconds after entering the edge zone (with LMB held) before the first impulse fires.\n" +
-             "Gives the player a grace window at the start of each stroke.")]
+    [Tooltip("Seconds after entering edge zone before the first impulse fires. Grace window per stroke entry.")]
     [SerializeField] private float _impulseDelayDuration = 1f;
 
-    [Tooltip("Speed (texture px/s) at which the colored cursor moves AWAY during an impulse.\n" +
-             "Low = slow creep. High = fast lurch. Try 40–80.")]
+    [Tooltip(
+        "BASE outward travel speed (texture px/s).\n" +
+        "Scales with velocity — move fast → impulse lurches outward faster."
+    )]
     [SerializeField] private float _impulseSpeed = 55f;
 
-    [Tooltip("Maximum distance (texture px) the impulse can push the cursor from the raw mouse.\n" +
-             "The cursor will NOT travel beyond this. Try 25–45.")]
+    [Tooltip(
+        "BASE max push distance from raw mouse (texture px).\n" +
+        "Scales with velocity — move fast → impulse reaches further out."
+    )]
     [SerializeField] private float _impulseMagnitude = 30f;
 
-    [Tooltip("Speed (texture px/s) at which the cursor RETURNS to the mouse after peak impulse.\n" +
-             "Higher than _impulseSpeed = fast snap back. Lower = slow crawl back.")]
+    [Tooltip(
+        "Return speed (texture px/s) after peak impulse.\n" +
+        "NOT velocity-scaled — constant recovery keeps correction learnable."
+    )]
     [SerializeField] private float _returnSpeed = 80f;
+
+    [Header("Velocity-Based Difficulty")]
+    [Tooltip(
+        "Cursor speed (texture px/s) below which multiplier = 1.0 (base difficulty).\n" +
+        "On a 512px canvas, ~20 px/s is a slow deliberate stroke."
+    )]
+    [SerializeField] private float _minVelocityThreshold = 20f;
+
+    [Tooltip(
+        "Cursor speed (texture px/s) at which multiplier reaches its ceiling.\n" +
+        "On a 512px canvas, ~200 px/s is a fast sweep across 40% of the image."
+    )]
+    [SerializeField] private float _maxVelocityThreshold = 200f;
+
+    [Tooltip(
+        "Multiplier ceiling at peak cursor speed.\n" +
+        "Applied to jitter intensity AND impulse speed/magnitude.\n" +
+        "1.0 = no scaling. 2.5 = 2.5× harder at max speed.\n" +
+        "Recommended: 2.0–3.0. Above 4.0 tends to feel unfair."
+    )]
+    [SerializeField] private float _maxVelocityMultiplier = 2.5f;
+
+    [Tooltip(
+        "Exponential smoothing factor for velocity. Higher = snappier but noisier.\n" +
+        "Recommended: 6–10."
+    )]
+    [SerializeField] private float _velocitySmoothing = 8f;
 
     [Header("Progress & Win / Fail")]
     [Range(0.1f, 1f)]
@@ -138,7 +188,7 @@ public class ColoringMinigame_v2 : MonoBehaviour
     [Range(0.01f, 0.5f)]
     [SerializeField] private float _outOfBoundsFailThreshold = 0.15f;
 
-    [Tooltip("How often (seconds) to sample the canvas for progress. Never sample every frame.")]
+    [Tooltip("Seconds between canvas progress samples. Never sample every frame.")]
     [SerializeField] private float _progressSampleInterval = 0.4f;
 
     [Header("Debug UI")]
@@ -148,7 +198,7 @@ public class ColoringMinigame_v2 : MonoBehaviour
     // PRIVATE STATE
     // ============================================================
 
-    // Canvas & rendering
+    // Scene-wired rendering references
     private Canvas _canvas;
     private RawImage _paintingDisplay;
     private Image _sketchDisplay;
@@ -161,10 +211,17 @@ public class ColoringMinigame_v2 : MonoBehaviour
     // Cursor visual
     private Image _cursorImage;
     private RectTransform _cursorRect;
-    private Texture2D _cursorTexture;
+    private Texture2D _cursorTexture;     // Only allocated for circle fallback
     private Vector2 _textureToScreenScale;
+    // WHY: Cached at Awake so UpdateCursorVisual never tries to resize the marker.
+    //      Resizing a marker every frame based on brushRadius would distort artist artwork.
+    private bool _useMarkerCursor;
 
-    // Mask data — flat array avoids per-pixel allocation
+    // Runtime GameObjects we own — tracked for explicit OnDestroy cleanup
+    private GameObject _cursorGO;
+    private GameObject _debugTextGO;
+
+    // Mask data — flat array avoids per-pixel allocation in Update
     private Color[] _maskPixels;
     private int _totalMaskPixels;
 
@@ -175,8 +232,8 @@ public class ColoringMinigame_v2 : MonoBehaviour
     private float _distanceTraveledThisStroke;
 
     // WHY: _effectiveCursorPos is the single source of truth.
-    //      Both the painter and the visual cursor read it.
-    //      It is updated ONCE per frame in UpdateEffectiveCursorPos().
+    //      The painter and the visual cursor BOTH read it.
+    //      It is written ONCE per frame in UpdateEffectiveCursorPos().
     private Vector2 _effectiveCursorPos;
     private Vector2 _lastEffectiveCursorPos;
     private bool _effectivePosInitialised;
@@ -187,21 +244,35 @@ public class ColoringMinigame_v2 : MonoBehaviour
     private float _edgeProximity;
     private Vector2 _nearestOutsideDirection;
 
-    // WHY: ImpulsePhase is a mini state machine embedded in the edge system.
+    // WHY: ImpulsePhase is a mini state machine inside the edge system.
     //
-    //      Inactive  ──► (enter NearEdge + LMB held)         ──► Waiting
-    //      Waiting   ──► (_impulseDelayDuration elapsed)      ──► MovingOut
-    //      MovingOut ──► (distance == _impulseMagnitude)      ──► Returning
-    //      Returning ──► (distance == 0)                      ──► MovingOut  [cycles]
+    //   Inactive  ──► (NearEdge + LMB held)              ──► Waiting
+    //   Waiting   ──► (_impulseDelayDuration elapsed)     ──► MovingOut
+    //   MovingOut ──► (distance == effectiveMagnitude)    ──► Returning
+    //   Returning ──► (distance == 0)                     ──► MovingOut  [cycles]
     //
-    //      Reset to Inactive: LMB released, zone leaves NearEdge, new stroke.
-    //      The delay only applies to the FIRST impulse per stroke entry.
-    //      Subsequent cycles are immediate — difficulty stays continuous.
+    //   Reset to Inactive: LMB up, zone exits NearEdge, new stroke, R pressed.
+    //   Delay only applies to the FIRST impulse per edge-zone entry.
+    //   Subsequent cycles are immediate — difficulty stays continuous.
     private enum ImpulsePhase { Inactive, Waiting, MovingOut, Returning }
     private ImpulsePhase _impulsePhase = ImpulsePhase.Inactive;
     private float _impulsePhaseTimer = 0f;
     private float _currentImpulseDistance = 0f;
     private Vector2 _currentImpulseDirection;
+
+    // WHY: Captured ONCE at the start of each MovingOut phase.
+    //      Locking the target magnitude means mid-cycle velocity changes
+    //      don't shift the goalposts while the impulse is already travelling.
+    //      New velocity is picked up on the NEXT cycle entry.
+    private float _currentEffectiveMagnitude;
+
+    // Velocity tracking
+    private Vector2 _prevRawTexturePos;
+    private bool _prevRawPosInitialised;
+    private float _smoothedVelocity;
+    // WHY: Single output of UpdateVelocity(). Both jitter and impulse read this.
+    //      Centralised so both systems see the identical value within one frame.
+    private float _currentVelocityMultiplier = 1f;
 
     // Progress state
     private float _progressSampleTimer;
@@ -216,19 +287,17 @@ public class ColoringMinigame_v2 : MonoBehaviour
 
     private void Awake()
     {
-        // WHY: Validate all injections immediately on boot.
-        //      A NullRef buried inside Update() costs 20 minutes to diagnose.
-        //      A clear error here costs 20 seconds.
+        // WHY: Validate all four injections immediately. A NullRef buried inside
+        //      Update() costs 20 minutes to diagnose. A clear error here costs 20 seconds.
         if (_injectedCanvas == null ||
             _injectedPaintingDisplay == null ||
             _injectedSketchDisplay == null ||
             _injectedPanelRect == null)
         {
             Debug.LogError(
-                "[ColoringMinigame] Missing scene references. " +
-                "Assign all four fields in the Inspector:\n" +
-                "  • Injected Canvas          → Minigames GameObject\n" +
-                "  • Injected Painting Display → Color Area (must be RawImage)\n" +
+                "[ColoringMinigame] Missing scene references. Assign in Inspector:\n" +
+                "  • Injected Canvas           → Minigames\n" +
+                "  • Injected Painting Display → Color Area (RawImage)\n" +
                 "  • Injected Sketch Display   → Outline (Image)\n" +
                 "  • Injected Panel Rect       → Coloring (RectTransform)"
             );
@@ -237,24 +306,20 @@ public class ColoringMinigame_v2 : MonoBehaviour
         }
 
         // Wire injected references into the private fields used by all logic below.
-        // WHY: Every method downstream uses _canvas, _paintingDisplay, etc. directly.
-        //      Keeping the injected fields separate means we could support
+        // WHY: Keeping injected and internal fields separate means we could support
         //      re-initialisation with a different hierarchy at runtime if needed.
         _canvas = _injectedCanvas;
         _paintingDisplay = _injectedPaintingDisplay;
         _sketchDisplay = _injectedSketchDisplay;
         _panelRect = _injectedPanelRect;
 
-        // Cursor is still procedural — it's a runtime circle, not a static asset.
-        // WHY: No point cluttering the designed hierarchy with a cursor GO.
-        //      It's generated in 10 lines and trivially swappable.
+        // Cursor is still procedural — it doesn't belong in the designed hierarchy.
         BuildCursorVisual();
 
-        // Debug text is optional and runtime-generated.
         if (_showProgressOnScreen)
             BuildDebugText();
 
-        // ── Mask & canvas setup ──────────────────────────────────────────────
+        // ── Mask & canvas texture setup ──────────────────────────────────────
         _maskPixels = _maskTexture.GetPixels();
         _canvasWidth = _maskTexture.width;
         _canvasHeight = _maskTexture.height;
@@ -271,7 +336,7 @@ public class ColoringMinigame_v2 : MonoBehaviour
         if (_totalMaskPixels == 0)
         {
             Debug.LogError("[ColoringMinigame] Mask has zero white pixels! " +
-                           "Check your mask — white fill inside the outline.");
+                           "Check mask texture — white fill = paintable area.");
             return;
         }
 
@@ -284,69 +349,91 @@ public class ColoringMinigame_v2 : MonoBehaviour
 
         _paintingDisplay.texture = _canvasTexture;
 
-        // WHY: Only assign sketch sprite if the artist hasn't already set it on
-        //      the Outline Image in the Inspector. Don't stomp pre-assigned assets.
-        //      If you want the script to own it exclusively, clear the sprite in
-        //      the Inspector and keep _sketchTexture assigned here.
+        // WHY: Guard prevents overwriting a sprite the artist set directly in the scene.
+        //      To have the script own the sketch exclusively, clear the Outline sprite
+        //      in the Inspector and assign _sketchTexture here instead.
         if (_sketchTexture != null && _sketchDisplay.sprite == null)
             _sketchDisplay.sprite = TextureToSprite(_sketchTexture);
 
+        // Circle fallback only — marker sprite was already wired in BuildCursorVisual()
+        if (!_useMarkerCursor)
+        {
+            _cursorTexture = GenerateCircleCursorTexture(64);
+            _cursorImage.sprite = Sprite.Create(
+                _cursorTexture,
+                new Rect(0, 0, _cursorTexture.width, _cursorTexture.height),
+                new Vector2(0.5f, 0.5f)
+            );
+        }
+
         _currentColorIndex = 0;
         _currentColor = _availableColors[0];
-
-        _cursorTexture = GenerateCircleCursorTexture(64);
-        _cursorImage.sprite = Sprite.Create(
-            _cursorTexture,
-            new Rect(0, 0, _cursorTexture.width, _cursorTexture.height),
-            new Vector2(0.5f, 0.5f)
-        );
         _cursorImage.color = _currentColor;
+        _currentEffectiveMagnitude = _impulseMagnitude;
 
         Cursor.visible = false;
 
-        Debug.Log($"[ColoringMinigame] Initialised on existing canvas. " +
-                  $"{_canvasWidth}x{_canvasHeight}, {_totalMaskPixels} paintable px.");
+        Debug.Log($"[ColoringMinigame] Initialised. {_canvasWidth}×{_canvasHeight}, " +
+                  $"{_totalMaskPixels} paintable px. " +
+                  $"Cursor: {(_useMarkerCursor ? "Marker sprite" : "Generated circle")}.");
     }
 
-    // WHY: Isolated from BuildDebugText so each has one reason to change.
-    //      If we ever swap the cursor to a custom sprite asset, this is the only
-    //      method that needs to change — nothing else in Awake() is touched.
+    // WHY: Isolated so swapping between marker and circle only touches this method.
+    //      Nothing else in Awake() changes if the cursor implementation changes.
     private void BuildCursorVisual()
     {
-        GameObject cursorGO = new GameObject("CursorVisual");
-        cursorGO.transform.SetParent(_panelRect, false);
+        _cursorGO = new GameObject("CursorVisual");
+        _cursorGO.transform.SetParent(_panelRect, false);
 
-        _cursorImage = cursorGO.AddComponent<Image>();
+        _cursorImage = _cursorGO.AddComponent<Image>();
         // WHY: raycastTarget = false ensures the cursor visual never eats mouse events
-        //      that should pass through to the panel or hotspots beneath it.
+        //      that should reach the panel or hotspots beneath it.
         _cursorImage.raycastTarget = false;
 
-        _cursorRect = cursorGO.GetComponent<RectTransform>();
+        _cursorRect = _cursorGO.GetComponent<RectTransform>();
         _cursorRect.anchorMin = new Vector2(0.5f, 0.5f);
         _cursorRect.anchorMax = new Vector2(0.5f, 0.5f);
-        _cursorRect.pivot = new Vector2(0.5f, 0.5f);
-        _cursorRect.sizeDelta = new Vector2(_brushRadius * 2f, _brushRadius * 2f);
+
+        if (_markerCursorSprite != null)
+        {
+            // WHY: Setting pivot to the marker tip means anchoredPosition maps DIRECTLY
+            //      to the paint application point — zero offset math required downstream.
+            //      The sprite hangs naturally above/around the tip.
+            _cursorImage.sprite = _markerCursorSprite;
+            _cursorRect.pivot = _markerCursorPivot;
+            _cursorRect.sizeDelta = _markerCursorSize;
+            _useMarkerCursor = true;
+        }
+        else
+        {
+            // WHY: Fallback circle for development without art assets.
+            //      Pivot at center — anchoredPosition = brush center.
+            //      Sprite is assigned later in Awake() after texture generation.
+            _cursorRect.pivot = new Vector2(0.5f, 0.5f);
+            _cursorRect.sizeDelta = new Vector2(_brushRadius * 2f, _brushRadius * 2f);
+            _useMarkerCursor = false;
+        }
     }
 
-    // WHY: Parented to the root Canvas, not the panel, so it renders above everything
+    // WHY: Parented to root Canvas, not the panel — renders above all panel content
     //      and is never clipped by the panel's RectTransform bounds.
     private void BuildDebugText()
     {
-        GameObject textGO = new GameObject("DebugText");
-        textGO.transform.SetParent(_canvas.transform, false);
+        _debugTextGO = new GameObject("DebugText");
+        _debugTextGO.transform.SetParent(_canvas.transform, false);
 
-        _debugText = textGO.AddComponent<Text>();
+        _debugText = _debugTextGO.AddComponent<Text>();
         _debugText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         _debugText.fontSize = 18;
         _debugText.color = Color.black;
         _debugText.alignment = TextAnchor.UpperLeft;
 
-        RectTransform textRT = textGO.GetComponent<RectTransform>();
+        RectTransform textRT = _debugTextGO.GetComponent<RectTransform>();
         textRT.anchorMin = new Vector2(0, 1);
         textRT.anchorMax = new Vector2(0, 1);
         textRT.pivot = new Vector2(0, 1);
         textRT.anchoredPosition = new Vector2(20, -20);
-        textRT.sizeDelta = new Vector2(500, 200);
+        textRT.sizeDelta = new Vector2(540, 280);
     }
 
     private Texture2D GenerateCircleCursorTexture(int size)
@@ -384,8 +471,12 @@ public class ColoringMinigame_v2 : MonoBehaviour
 
         HandleColorCycling();
         HandlePaintingInput();
+        HandleResetInput();
+        // WHY: Velocity MUST update before zone/cursor methods so _currentVelocityMultiplier
+        //      is fresh when jitter and impulse read it this same frame.
+        UpdateVelocity();
         UpdateCursorZone();
-        UpdateEffectiveCursorPos();   // Single source of truth — updates both paint + visual
+        UpdateEffectiveCursorPos();
         UpdateCursorVisual();
         SampleProgress();
         UpdateDebugText();
@@ -401,33 +492,94 @@ public class ColoringMinigame_v2 : MonoBehaviour
         {
             _currentColorIndex = (_currentColorIndex + 1) % _availableColors.Length;
             _currentColor = _availableColors[_currentColorIndex];
+            // WHY: Image.color tints both the generated sprite AND the marker sprite.
+            //      This is why the marker sprite must be white/greyscale — any
+            //      pre-existing colour on the sprite will multiply with the paint colour.
             _cursorImage.color = _currentColor;
         }
     }
 
     private void HandlePaintingInput()
     {
-        if (Input.GetMouseButtonDown(0))
+        // WHY: Block new strokes while failed or complete. Without this guard, a held
+        //      LMB during the 1.5s fail countdown re-dirties the canvas before
+        //      ResetCanvas() fires, causing it to immediately re-trigger the fail.
+        if (Input.GetMouseButtonDown(0) && !_isComplete && !_hasFailed)
         {
             _isPainting = true;
             _distanceTraveledThisStroke = 0f;
             _lastEffectiveCursorPos = _effectiveCursorPos;
             _effectivePosInitialised = true;
-
-            // WHY: Reset impulse on every new stroke so the player always gets
-            //      _impulseDelayDuration seconds of grace at the start of any stroke,
-            //      even if they immediately begin painting near an edge.
+            // WHY: Fresh grace period every new stroke, even when immediately near edge.
             ResetImpulseState();
         }
 
         if (Input.GetMouseButtonUp(0))
         {
             _isPainting = false;
-            // WHY: Reset impulse on LMB release so _currentImpulseDistance doesn't
-            //      persist across strokes. The next stroke starts with zero displacement.
             ResetImpulseState();
-            _canvasTexture.Apply();
+            if (_canvasTexture != null)
+                _canvasTexture.Apply();
         }
+    }
+
+    // WHY: CancelInvoke is critical. Without it, pressing R during the 1.5s auto-reset
+    //      countdown lets the Invoke fire anyway — calling ResetCanvas() a second time
+    //      and clearing a canvas the player may have already begun repainting.
+    private void HandleResetInput()
+    {
+        if (Input.GetKeyDown(KeyCode.R))
+        {
+            CancelInvoke(nameof(ResetCanvas));
+            ResetCanvas();
+        }
+    }
+
+    // ============================================================
+    // VELOCITY TRACKING
+    // ============================================================
+
+    /// <summary>
+    /// WHY: Tracks raw cursor speed in texture px/s, smoothed via exponential moving
+    ///      average to prevent single-frame delta spikes from causing jarring
+    ///      instantaneous difficulty changes mid-stroke.
+    ///
+    ///      Outside-panel handling: velocity decays toward zero and prev position is
+    ///      invalidated. Without this, re-entering the panel would compute a large
+    ///      outside→inside delta as a false speed spike.
+    ///
+    ///      Output: _currentVelocityMultiplier — read by jitter and impulse only.
+    ///      Both systems read the same value so there is zero divergence between
+    ///      how hard jitter hits vs. how hard the impulse hits within a frame.
+    /// </summary>
+    private void UpdateVelocity()
+    {
+        Vector2 rawPos = ScreenToTexturePosition(Input.mousePosition);
+        bool insidePanel = rawPos.x >= 0 && rawPos.x < _canvasWidth &&
+                           rawPos.y >= 0 && rawPos.y < _canvasHeight;
+
+        if (insidePanel)
+        {
+            if (_prevRawPosInitialised && Time.deltaTime > 0f)
+            {
+                float speed = Vector2.Distance(rawPos, _prevRawTexturePos) / Time.deltaTime;
+                _smoothedVelocity = Mathf.Lerp(_smoothedVelocity, speed,
+                                               Time.deltaTime * _velocitySmoothing);
+            }
+            _prevRawTexturePos = rawPos;
+            _prevRawPosInitialised = true;
+        }
+        else
+        {
+            // WHY: Decay to zero outside the panel so the multiplier doesn't stay
+            //      elevated when the cursor leaves and re-enters.
+            _smoothedVelocity = Mathf.Lerp(_smoothedVelocity, 0f,
+                                                 Time.deltaTime * _velocitySmoothing);
+            _prevRawPosInitialised = false;
+        }
+
+        float t = Mathf.InverseLerp(_minVelocityThreshold, _maxVelocityThreshold, _smoothedVelocity);
+        _currentVelocityMultiplier = Mathf.Lerp(1f, _maxVelocityMultiplier, t);
     }
 
     // ============================================================
@@ -435,9 +587,9 @@ public class ColoringMinigame_v2 : MonoBehaviour
     // ============================================================
 
     /// <summary>
-    /// WHY: One method, one update per frame, one resulting position.
-    ///      The visual cursor and the painter BOTH read _effectiveCursorPos.
-    ///      Nothing else computes a cursor position anywhere else in this class.
+    /// WHY: One method, one update per frame, one output position.
+    ///      The visual cursor and the painter both read _effectiveCursorPos.
+    ///      Nothing else in this class computes a cursor position.
     /// </summary>
     private void UpdateEffectiveCursorPos()
     {
@@ -464,11 +616,9 @@ public class ColoringMinigame_v2 : MonoBehaviour
         switch (_currentZone)
         {
             case CursorZone.Middle:
-                // WHY: Reset impulse when cursor is in the safe zone. This ensures
-                //      the delay restarts each time the player re-enters the edge zone,
-                //      rewarding them for "escaping" back to the middle.
+                // WHY: Reset impulse in the safe zone so the delay timer restarts
+                //      next time the player enters the edge zone — rewards retreat.
                 ResetImpulseState();
-
                 if (_isPainting && rawDeltaMag > 0.1f)
                 {
                     _distanceTraveledThisStroke += rawDeltaMag;
@@ -482,13 +632,11 @@ public class ColoringMinigame_v2 : MonoBehaviour
 
             case CursorZone.NearEdge:
                 if (_isPainting)
-                {
                     _effectiveCursorPos = ComputeResistancePosition(rawTexturePos);
-                }
                 else
                 {
-                    // WHY: No painting = impulse should not run. Reset so the next
-                    //      stroke into this zone starts with a fresh delay.
+                    // WHY: Not painting → impulse must not run. Reset so the next
+                    //      LMB-down in this zone starts with a fresh grace countdown.
                     ResetImpulseState();
                     _effectiveCursorPos = rawTexturePos;
                 }
@@ -501,11 +649,10 @@ public class ColoringMinigame_v2 : MonoBehaviour
                 break;
         }
 
-        // ── Paint along the resolved path ───────────────────────────────────
-        // WHY: Painting is a consequence of the position update, not the trigger.
-        //      We stamp along the delta from last→current effective pos so fast
-        //      mouse movement never leaves gaps in the stroke.
-        if (_isPainting)
+        // WHY: Guard _hasFailed and _isComplete here — prevents paint being stamped
+        //      during the fail countdown (would re-dirty the canvas before ResetCanvas
+        //      fires) or after the minigame is already won.
+        if (_isPainting && !_hasFailed && !_isComplete)
         {
             float dist = Vector2.Distance(_lastEffectiveCursorPos, _effectiveCursorPos);
             if (dist > 0.01f)
@@ -520,7 +667,7 @@ public class ColoringMinigame_v2 : MonoBehaviour
             }
             else
             {
-                // Stationary LMB: stamp one dot so clicking immediately marks the canvas.
+                // Stationary click: stamp one dot so a click immediately marks the canvas.
                 StampBrush(_effectiveCursorPos, _currentColor);
             }
             _canvasTexture.Apply();
@@ -534,13 +681,14 @@ public class ColoringMinigame_v2 : MonoBehaviour
     // ============================================================
 
     /// <summary>
-    /// WHY: Oscillates the brush PERPENDICULAR to the dominant movement axis.
+    /// WHY: Oscillates PERPENDICULAR to the dominant movement axis.
     ///      Driven by _distanceTraveledThisStroke (not Time.time) so the wave
-    ///      frequency is consistent regardless of mouse speed.
+    ///      frequency stays consistent regardless of mouse speed — the wobble
+    ///      pattern is purely spatial, not temporal.
     ///
-    ///      Dominant axis clamping prevents diagonal chaos:
-    ///        Vertical movement   → horizontal oscillation
-    ///        Horizontal movement → vertical oscillation
+    ///      Axis-clamping prevents diagonal chaos:
+    ///        Vertical motion   → horizontal oscillation
+    ///        Horizontal motion → vertical oscillation
     /// </summary>
     private Vector2 ComputeCurvedPosition(Vector2 rawPos)
     {
@@ -549,8 +697,8 @@ public class ColoringMinigame_v2 : MonoBehaviour
         mouseDelta.Normalize();
 
         Vector2 perpendicular = Mathf.Abs(mouseDelta.y) > Mathf.Abs(mouseDelta.x)
-            ? new Vector2(1f, 0f)   // Vertical motion   → horizontal wave
-            : new Vector2(0f, 1f);  // Horizontal motion → vertical wave
+            ? new Vector2(1f, 0f)
+            : new Vector2(0f, 1f);
 
         float oscillation = Mathf.Sin(_distanceTraveledThisStroke * _curveFrequency * Mathf.PI * 2f)
                             * _curveAmplitude;
@@ -559,28 +707,25 @@ public class ColoringMinigame_v2 : MonoBehaviour
     }
 
     /// <summary>
-    /// WHY: Two forces compose the near-edge displacement:
+    /// WHY: Two composited forces make up near-edge displacement:
     ///
-    ///   1. STEADY RESISTANCE — a direct proportional offset.
-    ///      Always present while painting near the edge. Scales linearly with proximity.
-    ///      No accumulation, no memory. Predictable and Inspector-friendly.
+    ///   STEADY RESISTANCE — direct proportional outward offset.
+    ///     Always present while painting. Scales with proximity. Not velocity-scaled.
+    ///     Predictable — the player always knows how hard to push back.
     ///
-    ///   2. CYCLIC IMPULSE — a phase-driven outward lurch.
-    ///      Fires after _impulseDelayDuration, travels to _impulseMagnitude at _impulseSpeed,
-    ///      returns at _returnSpeed, then immediately cycles again.
-    ///      Direction has ±30° random variation each cycle so it never feels robotic.
+    ///   CYCLIC IMPULSE — phase-driven outward lurch.
+    ///     Speed AND magnitude both scale with _currentVelocityMultiplier.
+    ///     Draw fast → impulse travels outward faster AND further.
+    ///     Recovery speed (_returnSpeed) is NOT scaled — predictable correction window.
     ///
-    ///   Total displacement = resistanceOffset + impulseOffset.
-    ///   Both are in texture pixels, relative to the raw mouse position.
+    ///   Total = rawPos + resistanceOffset + impulseOffset.
     /// </summary>
     private Vector2 ComputeResistancePosition(Vector2 rawPos)
     {
-        // Steady resistance: direct offset, no state, always proportional
         Vector2 resistanceOffset = _nearestOutsideDirection
                                    * _resistanceStrength
                                    * _edgeProximity;
 
-        // Cyclic impulse: advance the phase machine, read current displacement
         TickImpulsePhase();
         Vector2 impulseOffset = _currentImpulseDirection * _currentImpulseDistance;
 
@@ -588,20 +733,14 @@ public class ColoringMinigame_v2 : MonoBehaviour
     }
 
     /// <summary>
-    /// WHY: The state machine that drives the cyclic impulse behavior.
+    /// WHY: Velocity scaling applied to:
+    ///   • _impulseSpeed            → impulse travels outward faster at high cursor speed
+    ///   • _currentEffectiveMagnitude → captured ONCE at MovingOut entry, not re-read mid-cycle
     ///
-    ///   Inactive  → Waiting:    Immediately when first called (entry into NearEdge
-    ///                           zone while painting). Starts the delay countdown.
-    ///
-    ///   Waiting   → MovingOut:  After _impulseDelayDuration seconds.
-    ///                           Picks a new direction (±30° from nearest-outside).
-    ///
-    ///   MovingOut → Returning:  _currentImpulseDistance reaches _impulseMagnitude.
-    ///
-    ///   Returning → MovingOut:  _currentImpulseDistance returns to 0.
-    ///                           Immediately cycles — no second delay.
-    ///                           WHY: the grace period is for the FIRST impulse only.
-    ///                           After that, difficulty is continuous.
+    ///   The magnitude lock is a key design decision: if magnitude were re-read every frame,
+    ///   slowing down mid-impulse would shrink the target and could invert cursor direction.
+    ///   Capturing it at phase entry keeps the impulse deterministic and gives the player
+    ///   something stable to fight against. New velocity is applied on the NEXT cycle.
     /// </summary>
     private void TickImpulsePhase()
     {
@@ -618,27 +757,38 @@ public class ColoringMinigame_v2 : MonoBehaviour
                 {
                     _impulsePhase = ImpulsePhase.MovingOut;
                     _currentImpulseDistance = 0f;
+                    // WHY: Lock velocity-scaled magnitude at the moment the impulse fires.
+                    //      Moving fast when the impulse triggers = it reaches further.
+                    _currentEffectiveMagnitude = _impulseMagnitude * _currentVelocityMultiplier;
                     PickImpulseDirection();
                 }
                 break;
 
             case ImpulsePhase.MovingOut:
-                _currentImpulseDistance += _impulseSpeed * Time.deltaTime;
-                if (_currentImpulseDistance >= _impulseMagnitude)
+                // WHY: Speed scales with current velocity — faster cursor = impulse
+                //      travels outward quicker, leaving less reaction time.
+                _currentImpulseDistance += _impulseSpeed * _currentVelocityMultiplier * Time.deltaTime;
+                if (_currentImpulseDistance >= _currentEffectiveMagnitude)
                 {
-                    _currentImpulseDistance = _impulseMagnitude;
+                    _currentImpulseDistance = _currentEffectiveMagnitude;
                     _impulsePhase = ImpulsePhase.Returning;
                 }
                 break;
 
             case ImpulsePhase.Returning:
+                // WHY: Return speed is constant — the player must learn "after the lurch,
+                //      I have exactly this much time to correct." Variable return speed
+                //      breaks that learned rhythm and makes the mechanic feel unfair.
                 _currentImpulseDistance -= _returnSpeed * Time.deltaTime;
                 if (_currentImpulseDistance <= 0f)
                 {
                     _currentImpulseDistance = 0f;
-                    // WHY: Cycle immediately — no second delay. Difficulty stays constant
-                    //      once the impulse has started. The player must keep compensating.
+                    // WHY: Cycle immediately — no second delay. After the first impulse,
+                    //      difficulty is continuous. The player must stay slow.
                     _impulsePhase = ImpulsePhase.MovingOut;
+                    // WHY: Re-capture magnitude each cycle so sustained fast movement
+                    //      keeps escalating. Drawing slowly is the only way to reduce it.
+                    _currentEffectiveMagnitude = _impulseMagnitude * _currentVelocityMultiplier;
                     PickImpulseDirection();
                 }
                 break;
@@ -646,18 +796,16 @@ public class ColoringMinigame_v2 : MonoBehaviour
     }
 
     /// <summary>
-    /// WHY: Picks a new outward direction with ±30° random variation every cycle.
-    ///      Pure outward (0° variation) feels robotic after 2 repetitions — the player
-    ///      learns the exact angle and compensates mechanically. ±30° keeps them guessing
-    ///      while still being fundamentally "away from the sketch".
+    /// WHY: ±30° random variation per cycle prevents mechanical compensation.
+    ///      Pure outward (0° variation) = player learns the exact angle in 2 reps.
+    ///      ±30° keeps it unpredictable while remaining fundamentally "away from sketch."
     /// </summary>
     private void PickImpulseDirection()
     {
         if (_nearestOutsideDirection == Vector2.zero)
         {
-            // WHY: Fallback guard. Shouldn't happen in NearEdge zone, but if zone
-            //      detection races and delivers a zero vector, default to right
-            //      rather than producing a (0,0) impulse silently.
+            // WHY: Fallback guard. Zero vector → zero impulse offset silently.
+            //      Default to right so feedback is visible if zone detection races.
             _currentImpulseDirection = Vector2.right;
             return;
         }
@@ -674,19 +822,16 @@ public class ColoringMinigame_v2 : MonoBehaviour
 
     /// <summary>
     /// WHY: Centralised reset so no caller forgets to zero the distance.
-    ///      Called from: HandlePaintingInput (LMB down/up), UpdateEffectiveCursorPos
-    ///      (zone transitions), ResetCanvas. One method — one place to update if
-    ///      new impulse fields are ever added.
-    ///
-    ///      NOTE: _currentImpulseDirection is intentionally NOT reset here.
-    ///      Since _currentImpulseDistance = 0, impulse offset = direction * 0 = (0,0).
-    ///      Direction is repicked by PickImpulseDirection() on the next MovingOut entry.
+    ///      _currentImpulseDirection intentionally NOT reset — distance is 0 so
+    ///      offset = direction × 0 = (0,0). Direction is repicked on next MovingOut.
+    ///      _currentEffectiveMagnitude reset to base so next entry starts fresh.
     /// </summary>
     private void ResetImpulseState()
     {
         _impulsePhase = ImpulsePhase.Inactive;
         _impulsePhaseTimer = 0f;
         _currentImpulseDistance = 0f;
+        _currentEffectiveMagnitude = _impulseMagnitude;
     }
 
     // ============================================================
@@ -694,11 +839,14 @@ public class ColoringMinigame_v2 : MonoBehaviour
     // ============================================================
 
     /// <summary>
-    /// WHY: Reads _effectiveCursorPos directly — guarantees visual and paint always agree.
-    ///      The ONE exception is NearEdge + no LMB: we add cosmetic jitter on top.
-    ///      Jitter is VISUAL ONLY. It never affects where paint is stamped.
-    ///      Applying it while painting would make the brush circle lie about where
-    ///      the paint is going, which is disorienting rather than challenging.
+    /// WHY: Reads _effectiveCursorPos — visual and paint always agree.
+    ///      EXCEPTION: NearEdge + LMB released → cosmetic jitter added on top.
+    ///      Jitter is VISUAL ONLY. Never applied while painting — the cursor would
+    ///      lie about where paint is going, which is disorienting, not challenging.
+    ///
+    ///      Velocity scaling: jitter × _currentVelocityMultiplier.
+    ///      Hover fast near an edge → cursor shakes more violently.
+    ///      Punishes hasty, nervous hovering. Rewards stillness.
     /// </summary>
     private void UpdateCursorVisual()
     {
@@ -708,7 +856,8 @@ public class ColoringMinigame_v2 : MonoBehaviour
         {
             float noiseX = Mathf.PerlinNoise(Time.time * _jitterSpeed, 0f) - 0.5f;
             float noiseY = Mathf.PerlinNoise(0f, Time.time * _jitterSpeed) - 0.5f;
-            displayTexturePos += new Vector2(noiseX, noiseY) * _jitterIntensity * 2f;
+            float effectiveJitter = _jitterIntensity * _currentVelocityMultiplier;
+            displayTexturePos += new Vector2(noiseX, noiseY) * effectiveJitter * 2f;
         }
 
         if (displayTexturePos.x < 0 || displayTexturePos.x >= _canvasWidth ||
@@ -721,9 +870,15 @@ public class ColoringMinigame_v2 : MonoBehaviour
         _cursorImage.enabled = true;
         _cursorRect.anchoredPosition = TextureToPanelLocal(displayTexturePos);
 
-        float cursorSize = _brushRadius * 2f * Mathf.Max(_textureToScreenScale.x,
-                                                          _textureToScreenScale.y);
-        _cursorRect.sizeDelta = new Vector2(cursorSize, cursorSize);
+        // WHY: Circle cursor scales with brushRadius — always shows the true paint
+        //      footprint. Marker cursor uses fixed artist-set size — resizing it every
+        //      frame would distort the artwork and misrepresent the actual brush tip.
+        if (!_useMarkerCursor)
+        {
+            float cursorSize = _brushRadius * 2f * Mathf.Max(_textureToScreenScale.x,
+                                                                    _textureToScreenScale.y);
+            _cursorRect.sizeDelta = new Vector2(cursorSize, cursorSize);
+        }
     }
 
     // ============================================================
@@ -731,12 +886,11 @@ public class ColoringMinigame_v2 : MonoBehaviour
     // ============================================================
 
     /// <summary>
-    /// WHY: Zone is always computed from the RAW mouse position, not _effectiveCursorPos.
-    ///      If we computed from the effective pos, an impulse that pushed the cursor
-    ///      outside the edge zone would immediately clear the zone and kill the impulse —
-    ///      a negative feedback loop that collapses the mechanic instantly.
-    ///      The player's INTENT (raw mouse) drives zone detection.
-    ///      The EXPERIENCE (effective pos) drives what they feel.
+    /// WHY: Always computed from RAW mouse position, never _effectiveCursorPos.
+    ///      If computed from effective pos, an impulse pushing the cursor outside
+    ///      the edge zone would immediately clear the zone and kill the impulse —
+    ///      a negative feedback loop that collapses the mechanic in one frame.
+    ///      Raw mouse = player INTENT. Effective pos = player EXPERIENCE.
     /// </summary>
     private void UpdateCursorZone()
     {
@@ -936,7 +1090,12 @@ public class ColoringMinigame_v2 : MonoBehaviour
 
     private void OnFail()
     {
-        Debug.Log("[ColoringMinigame] Resetting in 1.5s...");
+        // WHY: Force _isPainting false immediately. Without this, a held LMB during
+        //      the 1.5s countdown keeps stamping paint through UpdateEffectiveCursorPos,
+        //      re-dirtying the canvas before ResetCanvas() fires and instantly
+        //      re-triggering the fail condition on the next SampleProgress() call.
+        _isPainting = false;
+        Debug.Log("[ColoringMinigame] ❌ Failed. Auto-resetting in 1.5s. Press R to reset now.");
         Invoke(nameof(ResetCanvas), 1.5f);
     }
 
@@ -954,9 +1113,19 @@ public class ColoringMinigame_v2 : MonoBehaviour
         _paintedOutsideFraction = 0f;
         _distanceTraveledThisStroke = 0f;
         _effectivePosInitialised = false;
+        _smoothedVelocity = 0f;
+        _currentVelocityMultiplier = 1f;
+        _prevRawPosInitialised = false;
+
+        // WHY: Reset the sample timer to a full interval so SampleProgress() doesn't
+        //      fire on the very next frame after reset and immediately see a clean
+        //      canvas as 0% painted — which it is, but an instant re-evaluation
+        //      could race with the state the player left on the previous attempt.
+        _progressSampleTimer = _progressSampleInterval;
+
         ResetImpulseState();
 
-        Debug.Log("[ColoringMinigame] Canvas reset. Try again.");
+        Debug.Log("[ColoringMinigame] Canvas cleared. Draw slowly — R to reset at any time.");
     }
 
     // ============================================================
@@ -983,9 +1152,9 @@ public class ColoringMinigame_v2 : MonoBehaviour
             ImpulsePhase.Waiting =>
                 $"WAITING  {_impulsePhaseTimer:F1}s / {_impulseDelayDuration:F1}s",
             ImpulsePhase.MovingOut =>
-                $"► MOVING OUT  {_currentImpulseDistance:F0}px / {_impulseMagnitude:F0}px",
+                $"► OUT  {_currentImpulseDistance:F0}px / {_currentEffectiveMagnitude:F0}px",
             ImpulsePhase.Returning =>
-                $"◄ RETURNING   {_currentImpulseDistance:F0}px remaining",
+                $"◄ RETURN  {_currentImpulseDistance:F0}px remaining",
             _ => "???"
         };
 
@@ -993,12 +1162,36 @@ public class ColoringMinigame_v2 : MonoBehaviour
 
         _debugText.text =
             $"<b>Zone:</b> {zoneLabel}  <b>Proximity:</b> {_edgeProximity:F2}\n" +
+            $"<b>Speed:</b> {_smoothedVelocity:F0} px/s  " +
+            $"<b>Velocity ×:</b> {_currentVelocityMultiplier:F2}  " +
+            $"(range {_minVelocityThreshold:F0}–{_maxVelocityThreshold:F0} px/s)\n" +
             $"<b>Impulse:</b> {impulseLabel}\n" +
             $"<b>Resistance offset:</b> {resistNow:F1}px  " +
-            $"<b>(max {_resistanceStrength:F0}px at proximity 1)\n</b>" +
+            $"<b>(max {_resistanceStrength:F0}px at proximity 1.0)</b>\n" +
             $"<b>Painted Inside:</b>  {_paintedInsideFraction:P1} / {_completionThreshold:P0}\n" +
             $"<b>Painted Outside:</b> {_paintedOutsideFraction:P1} / {_outOfBoundsFailThreshold:P0}\n" +
-            $"<b>Status:</b> {(_isComplete ? "✅ COMPLETE" : _hasFailed ? "❌ FAILED" : "Painting...")}";
+            $"<b>Status:</b> {(_isComplete ? "✅ COMPLETE" : _hasFailed ? "❌ FAILED (auto-reset...)" : "Painting...")}  " +
+            $"<b>[R]</b> reset at any time";
+    }
+
+    // ============================================================
+    // LIFECYCLE — CLEANUP
+    // ============================================================
+
+    private void OnDestroy()
+    {
+        // WHY: We created these GameObjects — we destroy them. The scene hierarchy
+        //      owns everything else. Null checks guard against Awake() early-exit path.
+        if (_cursorGO != null) Destroy(_cursorGO);
+        if (_debugTextGO != null) Destroy(_debugTextGO);
+
+        // WHY: Texture2D assets created at runtime via new Texture2D() are NOT
+        //      managed by Unity's asset system and must be explicitly destroyed
+        //      to prevent GPU memory leaks across scene loads.
+        if (_canvasTexture != null) Destroy(_canvasTexture);
+        if (_cursorTexture != null) Destroy(_cursorTexture);
+
+        Cursor.visible = true;
     }
 
     // ============================================================
@@ -1010,14 +1203,20 @@ public class ColoringMinigame_v2 : MonoBehaviour
     public float PaintedInsideFraction => _paintedInsideFraction;
     public float PaintedOutsideFraction => _paintedOutsideFraction;
     public CursorZone CurrentZone => _currentZone;
+    public float CurrentVelocityMultiplier => _currentVelocityMultiplier;
 
     public void Exit()
     {
         Cursor.visible = true;
+        CancelInvoke(nameof(ResetCanvas));
         // WHY: We no longer own the Canvas — the scene hierarchy does.
         //      Destroying it here would nuke the entire Minigames hierarchy.
         //      The MinigameState or scene lifecycle is responsible for teardown.
     }
+
+    // ============================================================
+    // EDITOR VALIDATION
+    // ============================================================
 
 #if UNITY_EDITOR
     private void OnValidate()
@@ -1029,6 +1228,10 @@ public class ColoringMinigame_v2 : MonoBehaviour
         if (_impulseSpeed < 1f) _impulseSpeed = 1f;
         if (_impulseMagnitude < 1f) _impulseMagnitude = 1f;
         if (_impulseDelayDuration < 0f) _impulseDelayDuration = 0f;
+        if (_maxVelocityMultiplier < 1f) _maxVelocityMultiplier = 1f;
+        if (_maxVelocityThreshold <= _minVelocityThreshold)
+            _maxVelocityThreshold = _minVelocityThreshold + 1f;
+        if (_velocitySmoothing < 0.1f) _velocitySmoothing = 0.1f;
     }
 #endif
 }
