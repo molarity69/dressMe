@@ -80,11 +80,12 @@ public class ZipperPath : MonoBehaviour
         _lineRenderer.endWidth = _lineWidth;
         _lineRenderer.startColor = _lineColor;
         _lineRenderer.endColor = _lineColor;
-        _lineRenderer.useWorldSpace = false;
+        _lineRenderer.useWorldSpace = true;
 
         for (int i = 0; i < waypoints.Count; i++)
         {
-            _lineRenderer.SetPosition(i, new Vector3(waypoints[i].x, waypoints[i].y, 0f));
+            Vector3 worldPos = transform.TransformPoint(new Vector3(waypoints[i].x, waypoints[i].y, 0f));
+            _lineRenderer.SetPosition(i, worldPos);
         }
     }
 
@@ -104,7 +105,11 @@ public class ZipperPath : MonoBehaviour
 
         if (Input.GetMouseButtonUp(0))
         {
-            _isDragging = false;
+            if (_isDragging)
+            {
+                _isDragging = false;
+                HandleFailure();
+            }
         }
     }
 
@@ -153,6 +158,16 @@ public class ZipperPath : MonoBehaviour
         }
     }
 
+    private int GetCurrentSegmentIndex()
+    {
+        for (int i = _segmentStartPercentages.Count - 1; i >= 0; i--)
+        {
+            if (_currentProgress >= _segmentStartPercentages[i])
+                return i;
+        }
+        return 0;
+    }
+
     private Vector2 GetClosestPointOnPath(Vector2 localPoint, out float progress)
     {
         IReadOnlyList<Vector2> waypoints = _pathData.Waypoints;
@@ -161,7 +176,9 @@ public class ZipperPath : MonoBehaviour
         float closestDistance = float.MaxValue;
         float closestProgress = 0f;
 
-        for (int i = 0; i < waypoints.Count - 1; i++)
+        int startSegment = GetCurrentSegmentIndex();
+
+        for (int i = startSegment; i < waypoints.Count - 1; i++)
         {
             Vector2 segmentStart = waypoints[i];
             Vector2 segmentEnd = waypoints[i + 1];
@@ -220,19 +237,10 @@ public class ZipperPath : MonoBehaviour
     private void UpdateZipperSprite(float progress)
     {
         if (_zipperSpriteRenderer == null) return;
-        if (_pathData.ZipperSprites.Count == 0) return;
 
-        Sprite activeSprite = _pathData.ZipperSprites[0].Sprite;
-
-        for (int i = 0; i < _pathData.ZipperSprites.Count; i++)
-        {
-            if (progress >= _pathData.ZipperSprites[i].Threshold)
-            {
-                activeSprite = _pathData.ZipperSprites[i].Sprite;
-            }
-        }
-
-        _zipperSpriteRenderer.sprite = activeSprite;
+        Sprite sprite = _pathData.GetSpriteForProgress(progress);
+        if (sprite != null)
+            _zipperSpriteRenderer.sprite = sprite;
     }
 
     private Vector2 GetPositionAtProgress(float progress)
@@ -291,6 +299,8 @@ public class ZipperPath : MonoBehaviour
             Debug.LogWarning("ZipperPath has no GameStateEvent assigned.");
             return;
         }
+
+        Debug.Log("Path end!");
 
         _gameStateEvent.Raise(new GameStateData(_completionState, GameState.MiniGame));
     }
