@@ -34,6 +34,14 @@ public class NarrativeManager : MonoBehaviour
         _playerBox.HideImmediate();
     }
 
+    public void OnGameStateChanged(GameStateData data)
+    {
+        if (data.State == GameState.Narrative)
+            Activate();
+        else
+            Deactivate();
+    }
+
     private void Update()
     {
         if (!_isActive) return;
@@ -65,6 +73,7 @@ public class NarrativeManager : MonoBehaviour
 
         ShowCurrentLine();
     }
+
 
     private void ShowCurrentLine()
     {

@@ -42,7 +42,7 @@ public class GameManager : MonoBehaviour
         if (_mainMenuObject != null)
             _mainMenuObject.SetActive(false);
 
-        TransitionToState(GameState.PointAndClick);
+        TransitionToState(GameState.Narrative);
     }
 
     public void OnHotspotClicked(int hotspotIDValue)
@@ -100,6 +100,8 @@ public class GameManager : MonoBehaviour
             case GameState.MiniGame: OnEnterMiniGame(); break;
             case GameState.Narrative: OnEnterNarrative(); break;
         }
+
+        Debug.Log("Current State: " + _currentState);
     }
 
     private void OnEnterMainMenu()

@@ -10,6 +10,7 @@ GameObject:
   m_Component:
   - component: {fileID: 2531839756248124052}
   - component: {fileID: 2431436568621163283}
+  - component: {fileID: 2525431363936420289}
   m_Layer: 0
   m_Name: NarrativeManager
   m_TagString: Untagged
@@ -49,7 +50,35 @@ MonoBehaviour:
   _gameManager: {fileID: 0}
   _mrsSulaBox: {fileID: 263483853496305854}
   _playerBox: {fileID: 610927002208043603}
-  _narrativeData: {fileID: 0}
+  _narrativeData: {fileID: 11400000, guid: fca4de4aad71c2c46866f71be7077cc4, type: 2}
+--- !u!114 &2525431363936420289
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1789414501532570570}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0c9fce3558e524744a0ee5f2451fd1ee, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  gameEvent: {fileID: 11400000, guid: df7a31ad30de27640b92a19846415df9, type: 2}
+  unityEventResponse:
+    m_PersistentCalls:
+      m_Calls:
+      - m_Target: {fileID: 2431436568621163283}
+        m_TargetAssemblyTypeName: NarrativeManager, Assembly-CSharp
+        m_MethodName: OnGameStateChanged
+        m_Mode: 0
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
 --- !u!1 &7625426227814310112
 GameObject:
   m_ObjectHideFlags: 0
