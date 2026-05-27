@@ -15,6 +15,10 @@ public class GameManager : MonoBehaviour
     [SerializeField] private List<LevelData> _levels = new List<LevelData>();
     [SerializeField] private List<GameObject> _miniGames = new List<GameObject>();
 
+    [Header("Audio")]
+    [SerializeField] private AudioManager _audioManager;
+    [SerializeField] private AudioClip _mainMenuMusic;
+
     private GameState _currentState = GameState.MainMenu;
     private int _currentLevelIndex = 0;
     private readonly List<HotspotID> _clickedHotspots = new List<HotspotID>();
@@ -41,7 +45,8 @@ public class GameManager : MonoBehaviour
     {
         if (_mainMenuObject != null)
             _mainMenuObject.SetActive(false);
-
+        if (_audioManager != null)
+            _audioManager.FadeOutBGM(5.0f);
         TransitionToState(GameState.Narrative);
     }
 
@@ -108,6 +113,8 @@ public class GameManager : MonoBehaviour
     {
         if (_mainMenuObject != null)
             _mainMenuObject.SetActive(true);
+        if (_audioManager != null)
+            _audioManager.PlayBGM(_mainMenuMusic);
     }
 
     private void OnEnterPointAndClick()
