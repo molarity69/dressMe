@@ -46,6 +46,8 @@ public class GameManager : MonoBehaviour
         LevelData currentLevel = _levels[_currentLevelIndex];
         HotspotID clickedID = (HotspotID)hotspotIDValue;
 
+        Debug.Log("GameManager HotSpot Clicked " + clickedID);
+
         if (!currentLevel.RequiredHotspots.Contains(clickedID))
             return;
 
