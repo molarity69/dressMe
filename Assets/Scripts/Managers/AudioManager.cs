@@ -123,4 +123,17 @@ public class AudioManager : MonoBehaviour
         if (_oneShotSfxSource == null)
             Debug.LogError("[AudioManager] _oneShotSfxSource not assigned.");
     }
+
+    // - EventListener methods for GameManager to call directly (not via events) —
+
+    public void OnHotspotPressed(int hotspot)
+    {
+        switch ((HotspotID)hotspot)
+        {
+            case HotspotID.Window:
+                StopLoop();
+                break;
+            // Add more cases for other hotspots as needed
+        }
+    }
 }
