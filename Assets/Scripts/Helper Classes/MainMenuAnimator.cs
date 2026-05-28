@@ -19,6 +19,8 @@ public class MainMenuAnimator : MonoBehaviour
     [SerializeField] private List<SpriteRenderer> _spriteRenderers = new List<SpriteRenderer>();
     [SerializeField] private Color _spriteTargetColor = Color.white;
 
+    [SerializeField] private ChairRocking _chairRocking;
+
     private UnityAction _onComplete;
     private float _elapsed = 0f;
     private bool _isPlaying = false;
@@ -85,6 +87,8 @@ public class MainMenuAnimator : MonoBehaviour
         {
             _isPlaying = false;
             _onComplete?.Invoke();
+            _chairRocking.Enable();
+            _chairRocking.StartRocking();
         }
     }
 
