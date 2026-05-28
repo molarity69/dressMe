@@ -30,6 +30,7 @@
 //   _injectedPanelRect       → Coloring (its own RectTransform)
 // ============================================================
 
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -213,8 +214,12 @@ public class ColoringMinigame_v2 : MonoBehaviour
 
     [SerializeField] private GameManager _gameManager;
 
+    [Header("Speech Bubbles")]
+    [Tooltip("The first image that explains the game")]
+    [SerializeField] private Image _explainImage;
+
     [Header("Debug UI")]
-    [SerializeField] private bool _showProgressOnScreen = true;
+    [SerializeField] private bool _showProgressOnScreen = false;
 
     // ============================================================
     // PRIVATE STATE
@@ -346,8 +351,8 @@ public class ColoringMinigame_v2 : MonoBehaviour
 
         BuildCursorVisual();
 
-        if (_showProgressOnScreen)
-            BuildDebugText();
+        //if (_showProgressOnScreen)
+        //    BuildDebugText();
 
         // Add to the existing null check group — not a hard stop, just a warning
         if (_audioManager == null)
@@ -1328,14 +1333,33 @@ public class ColoringMinigame_v2 : MonoBehaviour
         }
     }
 
+    private IEnumerator SpeechBubbleSequence()
+    {
+        float fadeDuration = 1.5f;
+        float waitDuration = 3.0f;
+
+        // 1. Simultaneously fade out explain and fade in proud
+        _explainImage.CrossFadeAlpha(0f, fadeDuration, false);
+
+        // 2. Wait for the 1.5s fade transitions to finish
+        yield return new WaitForSeconds(fadeDuration);
+
+        // 3. Wait for an additional 3.0 seconds
+        yield return new WaitForSeconds(waitDuration);
+
+        Exit();
+        _gameManager.GoToState(GameState.Narrative);
+    }
+
 
     private void OnComplete()
     {
         // Stub: in production → _gameManager.ResolveMinigame(MinigameResult.Success)
         Debug.Log("[ColoringMinigame] 🎉 Transitioning to NarrativeState...");
+
         _audioManager.StopLoop();
-        Exit();
-        _gameManager.GoToState(GameState.Narrative);
+        StartCoroutine(SpeechBubbleSequence());
+        
 
     }
 
