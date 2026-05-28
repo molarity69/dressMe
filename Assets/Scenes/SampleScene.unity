@@ -568,6 +568,18 @@ GameObject:
   m_CorrespondingSourceObject: {fileID: 5779040864195972716, guid: c6bafea4382233b47baf09f999c78ecf, type: 3}
   m_PrefabInstance: {fileID: 1201519359}
   m_PrefabAsset: {fileID: 0}
+--- !u!225 &691748074
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 691748069}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &692130336 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 3756599664932362401, guid: d6fc017552f13b14e92a56eea3ba959d, type: 3}
@@ -1144,6 +1156,10 @@ PrefabInstance:
       value: 
       objectReference: {fileID: 692130338}
     - target: {fileID: 4675386976914804173, guid: c6bafea4382233b47baf09f999c78ecf, type: 3}
+      propertyPath: _menuCanvasGroup
+      value: 
+      objectReference: {fileID: 691748074}
+    - target: {fileID: 4675386976914804173, guid: c6bafea4382233b47baf09f999c78ecf, type: 3}
       propertyPath: _backgroundTransform
       value: 
       objectReference: {fileID: 1148461034}
@@ -1178,7 +1194,10 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 5779040864195972716, guid: c6bafea4382233b47baf09f999c78ecf, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 691748074}
   m_SourcePrefab: {fileID: 100100000, guid: c6bafea4382233b47baf09f999c78ecf, type: 3}
 --- !u!212 &1764432397 stripped
 SpriteRenderer:
