@@ -11,6 +11,8 @@ public enum HotspotID
     Clothes1,
     Clothes2,
     Clothes3,
+    ClosetUntidy2,
+    ClosetTidy2,
 }
 
 
@@ -115,6 +117,15 @@ public class Hotspot : MonoBehaviour, IPointerClickHandler
                 {
                     _imagesToActivate[2].SetActive(true);
                 }
+                break;
+            case HotspotID.ClosetUntidy2:
+                gameObject.SetActive(false);
+                _imagesToActivate[0].SetActive(true);
+                _spotHit = true;
+                break;
+            case HotspotID.ClosetTidy2:
+                _spriteRenderer.sprite = _alternateSprite;
+                _spotHit = true;
                 break;
         }
         
