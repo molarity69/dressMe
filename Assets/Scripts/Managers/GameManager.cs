@@ -21,7 +21,9 @@ public class GameManager : MonoBehaviour
     [SerializeField] private AudioClip _mainMenuMusic;
     [SerializeField] private AudioClip _citySounds;
 
+    [Header("Day 2")]
     [SerializeField] private GameObject _prepareDay2Image;
+    [SerializeField] private GameObject _activateDay2;
 
     private GameState _currentState = GameState.MainMenu;
     private int _currentLevelIndex = 0;
@@ -145,6 +147,7 @@ public class GameManager : MonoBehaviour
         _prepareDay2Image.SetActive(true);
         _audioManager.FadeInBGM(3.0f);
         FadeInHoldFadeOut(_prepareDay2Image.GetComponent<SpriteRenderer>(), 3.0f, 2.0f);
+        
         _currentLevelIndex++;
     }
 
@@ -171,6 +174,7 @@ public class GameManager : MonoBehaviour
         {
             color.a = 1f;
             sprite.color = color;
+            _activateDay2.SetActive(true);
         },
         onUpdate: t =>
         {
@@ -190,6 +194,7 @@ public class GameManager : MonoBehaviour
             color.a = 0f;
             sprite.color = color;
             _prepareDay2Image.SetActive(false);
+            
             GoToNarrative();
 
         },

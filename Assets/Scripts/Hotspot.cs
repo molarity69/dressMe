@@ -8,8 +8,9 @@ public enum HotspotID
     ClosetUntidy,
     ClosetTidy,
     Curtains,
-    HotspotD = 4,
-    HotspotE = 5
+    Clothes1,
+    Clothes2,
+    Clothes3,
 }
 
 

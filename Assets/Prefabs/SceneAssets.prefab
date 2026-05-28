@@ -158,7 +158,7 @@ SpriteRenderer:
   m_LightmapParameters: {fileID: 0}
   m_SortingLayerID: 0
   m_SortingLayer: 0
-  m_SortingOrder: 70
+  m_SortingOrder: 65
   m_Sprite: {fileID: 21300000, guid: 35de39336d3d33b4cbd354c40ee395f9, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -326,6 +326,8 @@ GameObject:
   m_Component:
   - component: {fileID: 4932923280141079037}
   - component: {fileID: 3113774589159592769}
+  - component: {fileID: 1131101335726833878}
+  - component: {fileID: 2533094994408061791}
   m_Layer: 0
   m_Name: MG01_CLOTHES ON FLOOR 02
   m_TagString: Untagged
@@ -400,6 +402,71 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_MaskInteraction: 0
   m_SpriteSortPoint: 0
+--- !u!61 &1131101335726833878
+BoxCollider2D:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1272963727074909567}
+  m_Enabled: 1
+  m_Density: 1
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_ForceSendLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ForceReceiveLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ContactCaptureLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_CallbackLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_IsTrigger: 0
+  m_UsedByEffector: 0
+  m_UsedByComposite: 0
+  m_Offset: {x: -2.0199082, y: -7.340281}
+  m_SpriteTilingProperty:
+    border: {x: 0, y: 0, z: 0, w: 0}
+    pivot: {x: 0.5, y: 0.5}
+    oldSize: {x: 38.399998, y: 21.599998}
+    newSize: {x: 38.399998, y: 21.599998}
+    adaptiveTilingThreshold: 0.5
+    drawMode: 0
+    adaptiveTiling: 0
+  m_AutoTiling: 0
+  serializedVersion: 2
+  m_Size: {x: 6.6902537, y: 5.0688734}
+  m_EdgeRadius: 0
+--- !u!114 &2533094994408061791
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1272963727074909567}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 47a8fd62aeb1d294fa791100348b1ef3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _hotspotID: 0
+  _hotspotClickedEvent: {fileID: 11400000, guid: f6434008b4f40c542a37d2abb659c160, type: 2}
+  _alternateSprite: {fileID: 0}
+  _gamemanager: {fileID: 0}
+  _imagesToActivate:
+  - {fileID: 5348356388667613599}
+  - {fileID: 2529062705783811292}
+  - {fileID: 4960487168096116870}
 --- !u!1 &1658344579229715181
 GameObject:
   m_ObjectHideFlags: 0
@@ -695,7 +762,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!4 &4399660417166522406
 Transform:
   m_ObjectHideFlags: 0
@@ -1510,6 +1577,8 @@ GameObject:
   m_Component:
   - component: {fileID: 7983704786798943284}
   - component: {fileID: 4598212527962768950}
+  - component: {fileID: 8162587812960700647}
+  - component: {fileID: 2979708206388736079}
   m_Layer: 0
   m_Name: MG01_CLOTHES ON FLOOR 03
   m_TagString: Untagged
@@ -1584,6 +1653,71 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_MaskInteraction: 0
   m_SpriteSortPoint: 0
+--- !u!61 &8162587812960700647
+BoxCollider2D:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6657585699789968847}
+  m_Enabled: 1
+  m_Density: 1
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_ForceSendLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ForceReceiveLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ContactCaptureLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_CallbackLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_IsTrigger: 0
+  m_UsedByEffector: 0
+  m_UsedByComposite: 0
+  m_Offset: {x: -10.900985, y: -7.893818}
+  m_SpriteTilingProperty:
+    border: {x: 0, y: 0, z: 0, w: 0}
+    pivot: {x: 0.5, y: 0.5}
+    oldSize: {x: 38.399998, y: 21.599998}
+    newSize: {x: 38.399998, y: 21.599998}
+    adaptiveTilingThreshold: 0.5
+    drawMode: 0
+    adaptiveTiling: 0
+  m_AutoTiling: 0
+  serializedVersion: 2
+  m_Size: {x: 11.046335, y: 5.002741}
+  m_EdgeRadius: 0
+--- !u!114 &2979708206388736079
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6657585699789968847}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 47a8fd62aeb1d294fa791100348b1ef3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _hotspotID: 0
+  _hotspotClickedEvent: {fileID: 11400000, guid: f6434008b4f40c542a37d2abb659c160, type: 2}
+  _alternateSprite: {fileID: 0}
+  _gamemanager: {fileID: 0}
+  _imagesToActivate:
+  - {fileID: 5348356388667613599}
+  - {fileID: 2529062705783811292}
+  - {fileID: 4960487168096116870}
 --- !u!1 &7038837040002061492
 GameObject:
   m_ObjectHideFlags: 0
@@ -1795,6 +1929,8 @@ GameObject:
   m_Component:
   - component: {fileID: 1012543232751361444}
   - component: {fileID: 6839982307122652781}
+  - component: {fileID: 2004491378198349602}
+  - component: {fileID: 154384044898578101}
   m_Layer: 0
   m_Name: MG01_CLOTHES ON FLOOR 01
   m_TagString: Untagged
@@ -1869,6 +2005,71 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_MaskInteraction: 0
   m_SpriteSortPoint: 0
+--- !u!61 &2004491378198349602
+BoxCollider2D:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8306562074275130973}
+  m_Enabled: 1
+  m_Density: 1
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_ForceSendLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ForceReceiveLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ContactCaptureLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_CallbackLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_IsTrigger: 0
+  m_UsedByEffector: 0
+  m_UsedByComposite: 0
+  m_Offset: {x: 5.6186347, y: -7.0626802}
+  m_SpriteTilingProperty:
+    border: {x: 0, y: 0, z: 0, w: 0}
+    pivot: {x: 0.5, y: 0.5}
+    oldSize: {x: 38.399998, y: 21.599998}
+    newSize: {x: 38.399998, y: 21.599998}
+    adaptiveTilingThreshold: 0.5
+    drawMode: 0
+    adaptiveTiling: 0
+  m_AutoTiling: 0
+  serializedVersion: 2
+  m_Size: {x: 8.153874, y: 5.0591526}
+  m_EdgeRadius: 0
+--- !u!114 &154384044898578101
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8306562074275130973}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 47a8fd62aeb1d294fa791100348b1ef3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _hotspotID: 5
+  _hotspotClickedEvent: {fileID: 11400000, guid: f6434008b4f40c542a37d2abb659c160, type: 2}
+  _alternateSprite: {fileID: 0}
+  _gamemanager: {fileID: 0}
+  _imagesToActivate:
+  - {fileID: 5348356388667613599}
+  - {fileID: 2529062705783811292}
+  - {fileID: 4960487168096116870}
 --- !u!1 &8328580641460782722
 GameObject:
   m_ObjectHideFlags: 0
@@ -2055,7 +2256,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!4 &5763271356305479674
 Transform:
   m_ObjectHideFlags: 0

@@ -243,6 +243,7 @@ MonoBehaviour:
   _mainMenuMusic: {fileID: 8300000, guid: a13aeeb27cb27c44abca72bd0ae3ec83, type: 3}
   _citySounds: {fileID: 8300000, guid: 92e13187273ecf1449223187abaeb80d, type: 3}
   _prepareDay2Image: {fileID: 2520959923976717834}
+  _activateDay2: {fileID: 1103176528}
 --- !u!4 &518617518
 Transform:
   m_ObjectHideFlags: 0
@@ -484,6 +485,11 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1103176528 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 2388511105733747897, guid: d6fc017552f13b14e92a56eea3ba959d, type: 3}
+  m_PrefabInstance: {fileID: 2520959923976717833}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &1114970244
 GameObject:
   m_ObjectHideFlags: 0
@@ -903,7 +909,19 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 154384044898578101, guid: d6fc017552f13b14e92a56eea3ba959d, type: 3}
+      propertyPath: _gamemanager
+      value: 
+      objectReference: {fileID: 518617517}
+    - target: {fileID: 2533094994408061791, guid: d6fc017552f13b14e92a56eea3ba959d, type: 3}
+      propertyPath: _gamemanager
+      value: 
+      objectReference: {fileID: 518617517}
     - target: {fileID: 2738237082612060050, guid: d6fc017552f13b14e92a56eea3ba959d, type: 3}
+      propertyPath: _gamemanager
+      value: 
+      objectReference: {fileID: 518617517}
+    - target: {fileID: 2979708206388736079, guid: d6fc017552f13b14e92a56eea3ba959d, type: 3}
       propertyPath: _gamemanager
       value: 
       objectReference: {fileID: 518617517}
