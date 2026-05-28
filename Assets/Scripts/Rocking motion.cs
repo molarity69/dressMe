@@ -10,6 +10,8 @@ public class ChairRocking : MonoBehaviour
     [Range(1f, 8f)]
     public float cycleDuration = 3f;
 
+    public GameObject HappyPose;
+
     public AnimationCurve motionCurve = AnimationCurve.EaseInOut(0f, 0f, 1f, 1f);
 
     // Private — we decide when to start/stop
@@ -55,10 +57,22 @@ public class ChairRocking : MonoBehaviour
         isRocking = true;
     }
 
+    public void StartRockingAgain()
+    {
+        if (forwardPose == null || backwardPose == null) return;
+        isRocking = true;
+        forwardPose.gameObject.SetActive(true);
+        backwardPose.gameObject.SetActive(true);
+        HappyPose.SetActive(false);
+    }
+
     /// <summary> Call this to pause / stop rocking at the current pose. </summary>
     public void StopRocking()
     {
         isRocking = false;
+        forwardPose.gameObject.SetActive(false);
+        backwardPose.gameObject.SetActive(false);
+        HappyPose.SetActive(true);
     }
 
     /// <summary> Call this to reset to the starting pose (backward) and stop. </summary>

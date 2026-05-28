@@ -24,10 +24,13 @@ public class GameManager : MonoBehaviour
     [Header("Day 2")]
     [SerializeField] private GameObject _prepareDay2Image;
     [SerializeField] private GameObject _activateDay2;
+    [SerializeField] private ChairRocking _chairRocking;
 
     private GameState _currentState = GameState.MainMenu;
     private int _currentLevelIndex = 0;
     private readonly List<HotspotID> _clickedHotspots = new List<HotspotID>();
+
+    
 
     private void Start()
     {
@@ -92,6 +95,7 @@ public class GameManager : MonoBehaviour
         if (_clickedHotspots.Count >= currentLevel.RequiredHotspots.Count)
         {
             _clickedHotspots.Clear();
+            _chairRocking.StopRocking();
             TransitionToState(currentLevel.TargetState);
         }
     }
@@ -182,6 +186,7 @@ public class GameManager : MonoBehaviour
             color.a = 1f;
             sprite.color = color;
             _activateDay2.SetActive(true);
+            _chairRocking.StartRockingAgain();
         },
         onUpdate: t =>
         {
