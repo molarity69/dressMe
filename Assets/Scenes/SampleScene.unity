@@ -921,6 +921,10 @@ PrefabInstance:
       propertyPath: _gamemanager
       value: 
       objectReference: {fileID: 518617517}
+    - target: {fileID: 2090502294418921356, guid: d6fc017552f13b14e92a56eea3ba959d, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 2176578814446522081, guid: d6fc017552f13b14e92a56eea3ba959d, type: 3}
       propertyPath: _gamemanager
       value: 
@@ -937,6 +941,10 @@ PrefabInstance:
       propertyPath: _gamemanager
       value: 
       objectReference: {fileID: 518617517}
+    - target: {fileID: 4960487168096116870, guid: d6fc017552f13b14e92a56eea3ba959d, type: 3}
+      propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 5041527836977465675, guid: d6fc017552f13b14e92a56eea3ba959d, type: 3}
       propertyPath: _gamemanager
       value: 
