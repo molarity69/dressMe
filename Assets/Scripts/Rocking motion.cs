@@ -31,8 +31,8 @@ public class ChairRocking : MonoBehaviour
         
 
         // Start in a neutral / backward-pose state (fully visible)
-        SetAlpha(forwardPose, 0f);
-        SetAlpha(backwardPose, 1f);
+        SetAlpha(forwardPose, 1f);
+        SetAlpha(backwardPose, 0f);
     }
 
     private void Update()

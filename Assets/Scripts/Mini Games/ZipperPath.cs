@@ -29,6 +29,8 @@ public class ZipperPath : MonoBehaviour
     private float _totalLength = 0f;
     private List<float> _segmentStartPercentages = new List<float>();
 
+    public GameObject TheEnd;
+
     private void Awake()
     {
         _lineRenderer = GetComponent<LineRenderer>();
@@ -301,6 +303,8 @@ public class ZipperPath : MonoBehaviour
         }
 
         Debug.Log("Path end!");
+
+        TheEnd.SetActive(true);
 
         _gameStateEvent.Raise(new GameStateData(_completionState, GameState.Narrative));
     }
