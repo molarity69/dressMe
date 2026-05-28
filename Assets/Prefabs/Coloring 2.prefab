@@ -92,11 +92,14 @@ MonoBehaviour:
   _maxVelocityThreshold: 200
   _maxVelocityMultiplier: 2.5
   _velocitySmoothing: 8
-  _completionThreshold: 0.85
+  _completionThreshold: 0.4
   _outOfBoundsFailThreshold: 0.2
   _progressSampleInterval: 0.4
   _audioManager: {fileID: 0}
   _drawingSound: {fileID: 8300000, guid: 1d846b327cc842c4a983b079301fb224, type: 3}
+  _gameManager: {fileID: 0}
+  _explainImage: {fileID: 0}
+  _proudImage: {fileID: 0}
   _showProgressOnScreen: 1
 --- !u!1 &4995027136300517454
 GameObject:
