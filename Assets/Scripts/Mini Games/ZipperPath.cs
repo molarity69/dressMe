@@ -35,7 +35,7 @@ public class ZipperPath : MonoBehaviour
         _mainCamera = Camera.main;
     }
 
-    private void Start()
+    private void OnEnable()
     {
         if (_pathData == null)
         {
