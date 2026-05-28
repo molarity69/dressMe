@@ -913,6 +913,10 @@ PrefabInstance:
       propertyPath: _gamemanager
       value: 
       objectReference: {fileID: 518617517}
+    - target: {fileID: 2388511105733747897, guid: d6fc017552f13b14e92a56eea3ba959d, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 2533094994408061791, guid: d6fc017552f13b14e92a56eea3ba959d, type: 3}
       propertyPath: _gamemanager
       value: 

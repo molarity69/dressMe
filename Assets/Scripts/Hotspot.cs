@@ -71,6 +71,51 @@ public class Hotspot : MonoBehaviour, IPointerClickHandler
                 _spriteRenderer.sprite = _alternateSprite;
                 _spotHit = true;
                 break;
+            case HotspotID.Clothes1:
+                gameObject.SetActive(false);
+                if (!_imagesToActivate[0].active)
+                {
+                    _imagesToActivate[0].SetActive(true);
+                }
+                else if (!_imagesToActivate[1].active)
+                {
+                    _imagesToActivate[1].SetActive(true);
+                }
+                else if (!_imagesToActivate[2].active)
+                {
+                    _imagesToActivate[2].SetActive(true);
+                }
+                break;
+            case HotspotID.Clothes2:
+                gameObject.SetActive(false);
+                if (!_imagesToActivate[0].active)
+                {
+                    _imagesToActivate[0].SetActive(true);
+                }
+                else if (!_imagesToActivate[1].active)
+                {
+                    _imagesToActivate[1].SetActive(true);
+                }
+                else if (!_imagesToActivate[2].active)
+                {
+                    _imagesToActivate[2].SetActive(true);
+                }
+                break;
+            case HotspotID.Clothes3:
+                gameObject.SetActive(false);
+                if (!_imagesToActivate[0].active)
+                {
+                    _imagesToActivate[0].SetActive(true);
+                }
+                else if (!_imagesToActivate[1].active)
+                {
+                    _imagesToActivate[1].SetActive(true);
+                }
+                else if (!_imagesToActivate[2].active)
+                {
+                    _imagesToActivate[2].SetActive(true);
+                }
+                break;
         }
         
 

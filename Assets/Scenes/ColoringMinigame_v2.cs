@@ -1347,8 +1347,7 @@ public class ColoringMinigame_v2 : MonoBehaviour
         // 3. Wait for an additional 3.0 seconds
         yield return new WaitForSeconds(waitDuration);
 
-        Exit();
-        _gameManager.GoToState(GameState.Narrative);
+
     }
 
 
@@ -1358,8 +1357,10 @@ public class ColoringMinigame_v2 : MonoBehaviour
         Debug.Log("[ColoringMinigame] 🎉 Transitioning to NarrativeState...");
 
         _audioManager.StopLoop();
-        StartCoroutine(SpeechBubbleSequence());
-        
+        //StartCoroutine(SpeechBubbleSequence());
+        Exit();
+        _gameManager.GoToState(GameState.Narrative);
+
 
     }
 
