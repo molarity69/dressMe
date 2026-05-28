@@ -113,6 +113,7 @@ public class GameManager : MonoBehaviour
             case GameState.MiniGameColoring: OnEnterMiniGame(); break;
             case GameState.Narrative: OnEnterNarrative(); break;
             case GameState.PrepareDay2: PrepareDay2(); break;
+            case GameState.MiniGameZipper: OnEnterMiniGameZipper(); break;
         }
 
         Debug.Log("Current State: " + _currentState);
@@ -132,6 +133,12 @@ public class GameManager : MonoBehaviour
     }
 
     private void OnEnterMiniGame()
+    {
+        DeactivateAllMiniGames();
+        ActivateMiniGame(_currentLevelIndex);
+    }
+
+    private void OnEnterMiniGameZipper()
     {
         DeactivateAllMiniGames();
         ActivateMiniGame(_currentLevelIndex);

@@ -49,3 +49,11 @@ MonoBehaviour:
     SpeechSprite: {fileID: 21300000, guid: e7576c7ef2edb94449ca8e876329974d, type: 3}
     HasTransition: 1
     TransitionState: 1
+  - Character: 1
+    SpeechSprite: {fileID: 21300000, guid: aad5ae36b1f4dec458bad89ddf021401, type: 3}
+    HasTransition: 0
+    TransitionState: 4
+  - Character: 0
+    SpeechSprite: {fileID: 21300000, guid: 647590057021d58418faad1ceac31899, type: 3}
+    HasTransition: 1
+    TransitionState: 4

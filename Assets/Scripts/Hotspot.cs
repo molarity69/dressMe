@@ -85,7 +85,10 @@ public class Hotspot : MonoBehaviour, IPointerClickHandler
                 }
                 else if (!_imagesToActivate[2].active)
                 {
+                    _imagesToActivate[0].SetActive(false);
+                    _imagesToActivate[1].SetActive(false);
                     _imagesToActivate[2].SetActive(true);
+                    _imagesToActivate[3].SetActive(false);
                 }
                 break;
             case HotspotID.Clothes2:
@@ -100,7 +103,10 @@ public class Hotspot : MonoBehaviour, IPointerClickHandler
                 }
                 else if (!_imagesToActivate[2].active)
                 {
+                    _imagesToActivate[0].SetActive(false);
+                    _imagesToActivate[1].SetActive(false);
                     _imagesToActivate[2].SetActive(true);
+                    _imagesToActivate[3].SetActive(false);
                 }
                 break;
             case HotspotID.Clothes3:
@@ -115,7 +121,10 @@ public class Hotspot : MonoBehaviour, IPointerClickHandler
                 }
                 else if (!_imagesToActivate[2].active)
                 {
+                    _imagesToActivate[0].SetActive(false);
+                    _imagesToActivate[1].SetActive(false);
                     _imagesToActivate[2].SetActive(true);
+                    _imagesToActivate[3].SetActive(false);
                 }
                 break;
             case HotspotID.ClosetUntidy2:
@@ -124,6 +133,7 @@ public class Hotspot : MonoBehaviour, IPointerClickHandler
                 _spotHit = true;
                 break;
             case HotspotID.ClosetTidy2:
+                gameObject.SetActive(false);
                 _spriteRenderer.sprite = _alternateSprite;
                 _spotHit = true;
                 break;
