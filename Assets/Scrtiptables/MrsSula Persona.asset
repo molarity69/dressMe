@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f191b5b8b129496382813192c92f439e, type: 3}
+  m_Name: MrsSula Persona
+  m_EditorClassIdentifier: 
+  _profileJson: {fileID: 4900000, guid: 7cc4aa51c9ce47ac99c3969c7fd883c5, type: 3}
+  _characterId: mrs_sula
+  _playerName: Carer
+  _exampleExchanges:
+  - PlayerLine: "Come on, we don't have time for this. Get up."
+    Reply: "[UPSET] No. You are rushing me. I don't like it."
+  - PlayerLine: "You look worried, Mrs Sula. Can you tell me what's wrong?"
+    Reply: "[SAD] I don't like it today. Something is not right."
+  - PlayerLine: "Would you like your yellow cardigan or the blue one?"
+    Reply: "[NEUTRAL] Yellow. Yellow is my favourite."
+  - PlayerLine: "There's no rush. I'm here, and we can do it together."
+    Reply: "[HAPPY] Okay. Together is good. You are kind."

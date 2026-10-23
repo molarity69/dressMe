@@ -30,6 +30,10 @@ public class GameManager : MonoBehaviour
     private int _currentLevelIndex = 0;
     private readonly List<HotspotID> _clickedHotspots = new List<HotspotID>();
 
+    // Lets other systems (e.g. the care conversation) temporarily block hotspot clicks.
+    private bool _roomInteractionLocked = false;
+    public bool IsRoomInteractionLocked => _roomInteractionLocked;
+
     
 
     private void Start()
@@ -118,6 +122,7 @@ public class GameManager : MonoBehaviour
             case GameState.Narrative: OnEnterNarrative(); break;
             case GameState.PrepareDay2: PrepareDay2(); break;
             case GameState.MiniGameZipper: OnEnterMiniGameZipper(); break;
+            case GameState.Conversation: OnEnterConversation(); break;
         }
 
         Debug.Log("Current State: " + _currentState);
@@ -149,6 +154,11 @@ public class GameManager : MonoBehaviour
     }
 
     private void OnEnterNarrative()
+    {
+        DeactivateAllMiniGames();
+    }
+
+    private void OnEnterConversation()
     {
         DeactivateAllMiniGames();
     }
@@ -243,6 +253,7 @@ public class GameManager : MonoBehaviour
     public void GoToPointAndClick() => TransitionToState(GameState.PointAndClick);
     public void GoToMiniGame() => TransitionToState(GameState.MiniGameColoring);
     public void GoToNarrative() => TransitionToState(GameState.Narrative);
+    public void GoToConversation() => TransitionToState(GameState.Conversation);
     public void GoToMainMenu() => TransitionToState(GameState.MainMenu);
     public void GoToState(GameState state) => TransitionToState(state);
 
@@ -256,5 +267,10 @@ public class GameManager : MonoBehaviour
     public GameState GetCurrentState()
     {
         return _currentState;
+    }
+
+    public void SetRoomInteractionLocked(bool locked)
+    {
+        _roomInteractionLocked = locked;
     }
 }

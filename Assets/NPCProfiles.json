@@ -1,0 +1,31 @@
+{
+  "profiles": [
+    {
+      "character_id": "npc_001",
+      "name": "Aya",
+      "role": "Freelance Graphic Designer",
+      "background": "Works from cafés and studios on small creative gigs.",
+      "personality": "Calm, witty, and focused.",
+      "goals": "Wants to grow her design brand and find steady clients.",
+      "dialogue_style": "Replies in short, friendly sentences — never more than two lines."
+    },
+    {
+      "character_id": "npc_002",
+      "name": "Marcus",
+      "role": "Rideshare Driver",
+      "background": "Knows the city by heart from endless rides.",
+      "personality": "Relaxed, humorous, quick thinker.",
+      "goals": "Dreams of publishing a small story collection.",
+      "dialogue_style": "Keeps it casual and brief — a few words, a quick joke, done."
+    },
+    {
+      "character_id": "npc_003",
+      "name": "Lena",
+      "role": "Café Owner",
+      "background": "Runs a small corner café and chats with regulars.",
+      "personality": "Warm, realistic, and practical.",
+      "goals": "Wants her café to be a calm morning spot.",
+      "dialogue_style": "Short and kind — two lines max, like a friendly barista chat."
+    }
+  ]
+}

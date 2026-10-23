@@ -37,7 +37,10 @@ public class Hotspot : MonoBehaviour, IPointerClickHandler
     public void OnPointerClick(PointerEventData eventData)
     {
 
-        if (_gamemanager.GetCurrentState() != GameState.PointAndClick || _spotHit)
+        // Hotspots work in point-and-click and during the care conversation (talk and fix the room together).
+        GameState currentState = _gamemanager.GetCurrentState();
+        bool canInteract = currentState == GameState.PointAndClick || currentState == GameState.Conversation;
+        if (!canInteract || _spotHit || _gamemanager.IsRoomInteractionLocked)
             return;
 
         if (_hotspotClickedEvent == null)
@@ -75,15 +78,15 @@ public class Hotspot : MonoBehaviour, IPointerClickHandler
                 break;
             case HotspotID.Clothes1:
                 gameObject.SetActive(false);
-                if (!_imagesToActivate[0].active)
+                if (!_imagesToActivate[0].activeInHierarchy)
                 {
                     _imagesToActivate[0].SetActive(true);
                 }
-                else if (!_imagesToActivate[1].active)
+                else if (!_imagesToActivate[1].activeInHierarchy)
                 {
                     _imagesToActivate[1].SetActive(true);
                 }
-                else if (!_imagesToActivate[2].active)
+                else if (!_imagesToActivate[2].activeInHierarchy)
                 {
                     _imagesToActivate[0].SetActive(false);
                     _imagesToActivate[1].SetActive(false);
@@ -93,15 +96,15 @@ public class Hotspot : MonoBehaviour, IPointerClickHandler
                 break;
             case HotspotID.Clothes2:
                 gameObject.SetActive(false);
-                if (!_imagesToActivate[0].active)
+                if (!_imagesToActivate[0].activeInHierarchy)
                 {
                     _imagesToActivate[0].SetActive(true);
                 }
-                else if (!_imagesToActivate[1].active)
+                else if (!_imagesToActivate[1].activeInHierarchy)
                 {
                     _imagesToActivate[1].SetActive(true);
                 }
-                else if (!_imagesToActivate[2].active)
+                else if (!_imagesToActivate[2].activeInHierarchy)
                 {
                     _imagesToActivate[0].SetActive(false);
                     _imagesToActivate[1].SetActive(false);
@@ -111,15 +114,15 @@ public class Hotspot : MonoBehaviour, IPointerClickHandler
                 break;
             case HotspotID.Clothes3:
                 gameObject.SetActive(false);
-                if (!_imagesToActivate[0].active)
+                if (!_imagesToActivate[0].activeInHierarchy)
                 {
                     _imagesToActivate[0].SetActive(true);
                 }
-                else if (!_imagesToActivate[1].active)
+                else if (!_imagesToActivate[1].activeInHierarchy)
                 {
                     _imagesToActivate[1].SetActive(true);
                 }
-                else if (!_imagesToActivate[2].active)
+                else if (!_imagesToActivate[2].activeInHierarchy)
                 {
                     _imagesToActivate[0].SetActive(false);
                     _imagesToActivate[1].SetActive(false);

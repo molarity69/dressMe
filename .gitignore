@@ -73,3 +73,19 @@ crashlytics-build.properties
 # Temporary auto-generated Android Assets
 /[Aa]ssets/[Ss]treamingAssets/aa.meta
 /[Aa]ssets/[Ss]treamingAssets/aa/*
+
+# ---- dressMe: NPC Interactions / LLM for Unity ----
+# LLM model files (stored in %APPDATA%\LLMUnity, but never commit one; builds can leave a temporary copy)
+*.gguf
+
+# LLM for Unity llama.cpp libraries (~3.9 GB, files over GitHub's 100 MB limit); re-downloaded automatically on Editor load
+/[Aa]ssets/[Ss]treamingAssets/undreamai-*/
+/[Aa]ssets/[Ss]treamingAssets/undreamai-*.meta
+
+# Mixamo characters from the jam package demo scene (~392 MB, not used by dressMe)
+/[Aa]ssets/characters/
+/[Aa]ssets/characters.meta
+
+# Incomplete ML-Agents / Sentis copies left by the package import (the real ML-Agents comes from Package Manager)
+/[Pp]ackages/com.unity.ml-agents/
+/[Pp]ackages/com.unity.sentis/

@@ -18,6 +18,8 @@ public class ChairRocking : MonoBehaviour
     private bool isRocking = false;
     private float elapsedTime = 0f;
 
+    public bool IsRocking => isRocking;
+
     public void Enable()
     {
         // Validate references once
@@ -73,6 +75,12 @@ public class ChairRocking : MonoBehaviour
         forwardPose.gameObject.SetActive(false);
         backwardPose.gameObject.SetActive(false);
         HappyPose.SetActive(true);
+    }
+
+    /// <summary> Pauses the rocking where it is, without changing which poses are shown. </summary>
+    public void PauseRocking()
+    {
+        isRocking = false;
     }
 
     /// <summary> Call this to reset to the starting pose (backward) and stop. </summary>

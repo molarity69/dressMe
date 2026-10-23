@@ -5,7 +5,8 @@ public enum GameState
     MiniGameColoring,
     Narrative,
     MiniGameZipper,
-    PrepareDay2
+    PrepareDay2,
+    Conversation
 }
 
 public class GameStateData

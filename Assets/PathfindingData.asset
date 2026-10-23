@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1174a8b4df7bb4d4f8c0566853b56bfc, type: 3}
+  m_Name: PathfindingData
+  m_EditorClassIdentifier: 
+  instance_id: level_1_attempt_1
+  start_condition: player enters level
+  end_condition: goal reached or timeout
+  success_condition: player reaches exit
+  failure_condition: timeout or explicit failure
+  telemetry_family: pathfinding_basic
+  events:
+  - timestamp: 
+    event_type: 
+    moves: 0
+    nodes_expanded: 0
+    success_flag: 0

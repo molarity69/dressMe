@@ -1,0 +1,76 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 66d9eaefb52f4a079d05cddb1b41434a, type: 3}
+  m_Name: Day 1 - Whats Bothering Her
+  m_EditorClassIdentifier: 
+  _persona: {fileID: 11400000, guid: b2f12a3b67474d288cba7246ea067b25, type: 2}
+  _scenario: "It is morning. You are sitting in your rocking chair in your room, rocking to calm yourself, because something about the room is upsetting you today. Your carer has just come in."
+  _openingLine: "I don't like it. I don't like it today."
+  _startComfort: 20
+  _calmThreshold: 80
+  _agreementCondition: 
+  _moodDeltas:
+  - Mood: 0
+    Delta: 5
+  - Mood: 1
+    Delta: 15
+  - Mood: 2
+    Delta: 0
+  - Mood: 3
+    Delta: -15
+  - Mood: 4
+    Delta: -5
+  _comfortBands:
+  - MinComfort: 0
+    Feeling: "You feel very unsettled and anxious, and you are not sure things will be okay."
+  - MinComfort: 40
+    Feeling: "You are starting to feel a little better, but you are still unsure."
+  - MinComfort: 80
+    Feeling: "You feel calm and safe now, and you are glad your carer is here."
+  _roomIssues:
+  - Hotspot: 4
+    Hint: "the room feels too bright and busy, and it makes you tired"
+    ActionNote: "(The carer closes the curtains and the room becomes softer and calmer.)"
+    ComfortGain: 15
+    MissedFeedback: "The curtains were open, and the room felt too bright and busy for her."
+  - Hotspot: 1
+    Hint: "the noise from the cars outside is loud and scary"
+    ActionNote: "(The carer closes the window and the noise from the road goes quiet.)"
+    ComfortGain: 15
+    MissedFeedback: "The window was open and the noise from the road was upsetting her."
+  - Hotspot: 2
+    Hint: "seeing your things in a mess makes you feel muddled inside"
+    ActionNote: "(The carer tidies up the clothes in the closet.)"
+    ComfortGain: 15
+    MissedFeedback: "Her clothes were in a mess in the closet."
+  - Hotspot: 3
+    Hint: "something in the room is open that should be shut, and it bothers you"
+    ActionNote: "(The carer closes the closet door.)"
+    ComfortGain: 15
+    MissedFeedback: "The closet door was left open."
+  _hintChance: 0.4
+  _firstReplyHints: 1
+  _randomThoughts:
+  - "the cartoon with the funny dog you were watching"
+  - "your yellow cardigan, your favourite"
+  - "a little bird you saw on the windowsill yesterday"
+  - "what you might have for lunch today"
+  - "a song from the radio that you like to hum"
+  - "your sister, who comes to visit on Sundays"
+  _maxTurns: 10
+  _nextState: 3
+  _stopRockingOnCalm: 1
+  _calmByTalkingFeedback: "You helped Mrs Sula feel calm by listening to her and taking your time."
+  _calmByRoomFeedback: "You helped Mrs Sula feel calm by noticing what was bothering her and putting it right."
+  _allIssuesFixedFeedback: "You found everything in the room that was upsetting her."
+  _missedIssuesHeader: "Things you might have missed:"
+  _outOfTurnsFeedback: "Mrs Sula is still unsettled. It can take time. Listen to what she tells you, and look around her room for what might be upsetting her."
