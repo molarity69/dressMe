@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using LLMUnity;
 using System.Collections;
-using SimpleJSON;
 
 
 public class NPCPromptAssigner : MonoBehaviour

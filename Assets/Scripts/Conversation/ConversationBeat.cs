@@ -75,6 +75,16 @@ public class ConversationBeat : ScriptableObject
     [Tooltip("On success, end like the original level: stop rocking and show the chair's happy pose.")]
     [SerializeField] private bool _stopRockingOnCalm = true;
 
+    [Header("Fallback")]
+    [Tooltip("Said by her when the AI gives no usable reply (timeout, error or an empty answer). Counts as no change in comfort.")]
+    [SerializeField] private List<string> _fallbackLines = new List<string>
+    {
+        "Mmm...",
+        "I don't know...",
+        "Hmm. I'm a bit tired.",
+        "Mm-hm."
+    };
+
     [Header("Feedback")]
     [TextArea(2, 3)] [SerializeField] private string _calmByTalkingFeedback = "";
     [TextArea(2, 3)] [SerializeField] private string _calmByRoomFeedback = "";
@@ -94,6 +104,18 @@ public class ConversationBeat : ScriptableObject
     public int MaxTurns => _maxTurns;
     public GameState NextState => _nextState;
     public bool StopRockingOnCalm => _stopRockingOnCalm;
+
+    /// <summary>A random fallback line, avoiding the previous one when there is a choice.</summary>
+    public string GetFallbackLine(string previousLine)
+    {
+        if (_fallbackLines.Count == 0) return "Mmm...";
+        if (_fallbackLines.Count == 1) return _fallbackLines[0];
+
+        string line = _fallbackLines[UnityEngine.Random.Range(0, _fallbackLines.Count)];
+        while (line == previousLine)
+            line = _fallbackLines[UnityEngine.Random.Range(0, _fallbackLines.Count)];
+        return line;
+    }
 
     public int GetMoodDelta(CharacterMood mood)
     {

@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using LLMUnity;
 using TMPro;
 using UnityEngine;
@@ -43,7 +44,17 @@ public class ConversationManager : MonoBehaviour, IGameEventListener<int>
 
     [Header("Input")]
     [SerializeField] private TMP_InputField _playerInput;
-    [SerializeField] private string _thinkingText = "...";
+    [Tooltip("Shown in her bubble, one after another, until the first words of her reply arrive.")]
+    [SerializeField] private string[] _thinkingFrames = { ".", "..", "..." };
+    [SerializeField] private float _thinkingFrameTime = 0.4f;
+
+    [Header("Reliability")]
+    [Tooltip("Seconds without any reply text before giving up on her FIRST reply. Longer, because the model may still be reading her prompt on a slow PC.")]
+    [SerializeField] private float _firstReplyTimeout = 75f;
+    [Tooltip("Seconds without any new reply text before giving up on a later reply.")]
+    [SerializeField] private float _replyTimeout = 25f;
+    [Tooltip("After this many failed replies in a row, the beat ends with the feedback card so the story can continue.")]
+    [SerializeField] private int _maxFailuresBeforeEnding = 2;
 
     [Header("Room")]
     [Tooltip("The room stays locked until her first AI reply. When ticked, it also locks while she is replying, so clicks can't stack up.")]
@@ -61,6 +72,10 @@ public class ConversationManager : MonoBehaviour, IGameEventListener<int>
     [SerializeField] private TMP_Text _feedbackText;
     [SerializeField] private float _feedbackDelay = 2f;
     [SerializeField] private float _feedbackMinimumTime = 0.75f;
+    [Tooltip("Shrinks the feedback text to fit the card, so long 'missed' lists don't overflow.")]
+    [SerializeField] private bool _feedbackAutoSize = true;
+    [SerializeField] private float _feedbackMinFontSize = 18f;
+    [SerializeField] private float _feedbackMaxFontSize = 32f;
 
     [Header("Debug")]
     [SerializeField] private bool _logComfort = true;
@@ -88,6 +103,16 @@ public class ConversationManager : MonoBehaviour, IGameEventListener<int>
     private readonly Queue<string> _pendingNotes = new Queue<string>();
     private Timer _finishTimer;
     private Coroutine _pendingActivation;
+
+    // Reply tracking: each request gets an id so late callbacks from a cancelled request are ignored.
+    private int _requestId = 0;
+    private Task<string> _currentChatTask;
+    private float _lastProgressTime = 0f;
+    private float _currentTimeout = 0f;
+    private bool _hasVisibleReplyText = false;
+    private int _consecutiveFailures = 0;
+    private string _lastFallbackLine = string.Empty;
+    private Coroutine _thinkingRoutine;
 
     // Snapshot of her look on entry, restored on exit so later story beats play as designed.
     private readonly List<Sprite> _savedSprites = new List<Sprite>();
@@ -154,6 +179,8 @@ public class ConversationManager : MonoBehaviour, IGameEventListener<int>
 
     private void Update()
     {
+        CheckReplyHealth();
+
         if (!_isShowingFeedback) return;
         if (Time.unscaledTime - _feedbackShownTime < _feedbackMinimumTime) return;
 
@@ -219,6 +246,9 @@ public class ConversationManager : MonoBehaviour, IGameEventListener<int>
         _pendingFeelingNote = string.Empty;
         _lastHintedIssue = null;
         _lastThought = string.Empty;
+        _consecutiveFailures = 0;
+        _currentChatTask = null;
+        _lastFallbackLine = string.Empty;
 
         SaveCharacterLook();
         // Same text as the warm-up, so the model reuses what it already read instead of starting over.
@@ -244,11 +274,14 @@ public class ConversationManager : MonoBehaviour, IGameEventListener<int>
         _isActive = false;
         _isShowingFeedback = false;
         CancelFinishTimer();
+        StopThinking();
 
         if (_isWaitingForReply)
         {
+            _requestId++;
             _llmCharacter.CancelRequests();
             _isWaitingForReply = false;
+            _currentChatTask = null;
         }
 
         _pendingNotes.Clear();
@@ -326,30 +359,116 @@ public class ConversationManager : MonoBehaviour, IGameEventListener<int>
             _pendingFeelingNote = string.Empty;
         }
 
-        ShowOrUpdate(_characterBox, _characterBubbleSprite, _thinkingText);
-        _ = _llmCharacter.Chat(outgoingMessage, OnReplyUpdated, OnReplyCompleted);
+        ShowOrUpdate(_characterBox, _characterBubbleSprite, GetThinkingFrame(_thinkingFrames.Length - 1));
+        StartThinking();
+
+        _requestId++;
+        int requestId = _requestId;
+        _hasVisibleReplyText = false;
+        _lastProgressTime = Time.unscaledTime;
+        _currentTimeout = _hasHadFirstReply ? _replyTimeout : _firstReplyTimeout;
+        _currentChatTask = _llmCharacter.Chat(outgoingMessage,
+            reply => OnReplyUpdated(requestId, reply),
+            () => OnReplyCompleted(requestId));
     }
 
     // Called repeatedly while streaming; receives the full reply so far.
-    private void OnReplyUpdated(string reply)
+    private void OnReplyUpdated(int requestId, string reply)
     {
-        if (!_isActive) return;
+        if (!_isActive || requestId != _requestId || !_isWaitingForReply) return;
 
         _latestReply = reply;
+        _lastProgressTime = Time.unscaledTime;
+
         string displayText = CleanForDisplay(reply);
-        _characterBox.SetText(displayText.Length > 0 ? displayText : _thinkingText);
+        if (displayText.Length == 0) return; // keep the thinking dots until real words arrive
+
+        if (!_hasVisibleReplyText)
+        {
+            _hasVisibleReplyText = true;
+            StopThinking();
+        }
+        _characterBox.SetText(displayText);
     }
 
-    private void OnReplyCompleted()
+    private void OnReplyCompleted(int requestId)
     {
-        if (!_isActive) return;
+        if (!_isActive || requestId != _requestId || !_isWaitingForReply) return;
 
+        string replyText = RemoveNamePrefix(_latestReply);
+        if (CleanForDisplay(replyText).Length == 0)
+        {
+            HandleReplyFailure("empty reply");
+            return;
+        }
+
+        _consecutiveFailures = 0;
+        _characterBox.SetText(CleanForDisplay(replyText));
+        CompleteReply(replyText);
+    }
+
+    // Timeouts, errors, or an empty answer: she says a scripted line instead and the conversation carries on.
+    private void HandleReplyFailure(string reason)
+    {
+        Debug.LogWarning($"ConversationManager: no usable reply ({reason}). Using a fallback line.");
+
+        _requestId++; // ignore anything the cancelled request still sends
+        _llmCharacter.CancelRequests();
+        _consecutiveFailures++;
+
+        _lastFallbackLine = _beat.GetFallbackLine(_lastFallbackLine);
+        StopThinking();
+        _characterBox.SetText(_lastFallbackLine);
+
+        if (_consecutiveFailures >= _maxFailuresBeforeEnding)
+        {
+            Debug.LogWarning($"ConversationManager: {_consecutiveFailures} failed replies in a row, ending the beat.");
+            _isWaitingForReply = false;
+            _currentChatTask = null;
+            _hasHadFirstReply = true;
+            Finish(false);
+            return;
+        }
+
+        // No mood tag, so comfort doesn't change.
+        CompleteReply(string.Empty);
+    }
+
+    // Checked every frame while waiting: a crashed request, a finished one that never called back, or silence.
+    private void CheckReplyHealth()
+    {
+        if (!_isActive || !_isWaitingForReply || _isFinishing) return;
+
+        if (_currentChatTask != null && _currentChatTask.IsCompleted)
+        {
+            if (_currentChatTask.IsFaulted || _currentChatTask.IsCanceled)
+            {
+                HandleReplyFailure(_currentChatTask.IsFaulted ? "error: " + _currentChatTask.Exception?.GetBaseException().Message : "cancelled");
+                return;
+            }
+
+            // Finished without calling back: use whatever it returned.
+            if (string.IsNullOrEmpty(_latestReply) && _currentChatTask.Result != null)
+                _latestReply = _currentChatTask.Result;
+            OnReplyCompleted(_requestId);
+            return;
+        }
+
+        if (Time.unscaledTime - _lastProgressTime > _currentTimeout)
+            HandleReplyFailure($"no reply text for {_currentTimeout:0} s");
+    }
+
+    private void CompleteReply(string replyText)
+    {
         _isWaitingForReply = false;
+        _currentChatTask = null;
+        StopThinking();
+
         _hasHadFirstReply = true;
         if (_currentRequestIsPlayerLine)
             _turnCount++;
 
-        if (ConversationTags.TryGetMood(_latestReply, out CharacterMood mood))
+        if (ConversationTags.TryGetMood(replyText, out CharacterMood mood))
         {
             int gained = _comfort.Change(_beat.GetMoodDelta(mood));
             if (_currentRequestIsPlayerLine)
@@ -361,7 +480,7 @@ public class ConversationManager : MonoBehaviour, IGameEventListener<int>
             QueueFeelingNoteIfChanged();
         }
 
-        if (ConversationTags.HasGoalTag(_latestReply))
+        if (ConversationTags.HasGoalTag(replyText))
             _hasAgreed = true;
 
         ApplyComfortVisual();
@@ -398,6 +517,7 @@ public class ConversationManager : MonoBehaviour, IGameEventListener<int>
     {
         _isFinishing = true;
         _reachedCalm = reachedCalm;
+        StopThinking();
         _pendingNotes.Clear();
         _playerInput.interactable = false;
         SetRoomLocked(true);
@@ -419,6 +539,13 @@ public class ConversationManager : MonoBehaviour, IGameEventListener<int>
         {
             StartCoroutine(CompleteNextFrame());
             return;
+        }
+
+        if (_feedbackAutoSize)
+        {
+            _feedbackText.enableAutoSizing = true;
+            _feedbackText.fontSizeMin = _feedbackMinFontSize;
+            _feedbackText.fontSizeMax = _feedbackMaxFontSize;
         }
 
         _feedbackText.text = _beat.BuildFeedback(_reachedCalm, _comfortFromTalking, _comfortFromRoom, _openIssues);
@@ -644,14 +771,54 @@ public class ConversationManager : MonoBehaviour, IGameEventListener<int>
 
     private string CleanForDisplay(string reply)
     {
-        string cleaned = ConversationTags.StripTags(reply);
+        // Name first, so "Mrs Sula: HAPPY: ..." loses its bare tag too; then again for "[HAPPY] Mrs Sula: ...".
+        string cleaned = ConversationTags.StripTags(RemoveNamePrefix(reply));
+        return RemoveNamePrefix(cleaned);
+    }
 
-        // Small models sometimes prefix their own name, e.g. "Mrs Sula: ..."
+    // Small models sometimes prefix their own name, e.g. "Mrs Sula: ..."
+    private string RemoveNamePrefix(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return string.Empty;
+
+        string trimmed = text.TrimStart();
         string namePrefix = _beat.Persona.CharacterName + ":";
-        if (cleaned.StartsWith(namePrefix, StringComparison.OrdinalIgnoreCase))
-            cleaned = cleaned.Substring(namePrefix.Length).TrimStart();
+        if (trimmed.StartsWith(namePrefix, StringComparison.OrdinalIgnoreCase))
+            return trimmed.Substring(namePrefix.Length).TrimStart();
+        return text;
+    }
 
-        return cleaned;
+    private void StartThinking()
+    {
+        StopThinking();
+        if (_thinkingFrames != null && _thinkingFrames.Length > 1)
+            _thinkingRoutine = StartCoroutine(AnimateThinking());
+    }
+
+    private void StopThinking()
+    {
+        if (_thinkingRoutine == null) return;
+        StopCoroutine(_thinkingRoutine);
+        _thinkingRoutine = null;
+    }
+
+    private IEnumerator AnimateThinking()
+    {
+        int frameIndex = 0;
+        WaitForSecondsRealtime wait = new WaitForSecondsRealtime(Mathf.Max(0.05f, _thinkingFrameTime));
+        while (true)
+        {
+            if (_characterBox != null)
+                _characterBox.SetText(GetThinkingFrame(frameIndex));
+            frameIndex = (frameIndex + 1) % _thinkingFrames.Length;
+            yield return wait;
+        }
+    }
+
+    private string GetThinkingFrame(int index)
+    {
+        if (_thinkingFrames == null || _thinkingFrames.Length == 0) return "...";
+        return _thinkingFrames[Mathf.Clamp(index, 0, _thinkingFrames.Length - 1)];
     }
 
     private void EnableInput(bool clearText)

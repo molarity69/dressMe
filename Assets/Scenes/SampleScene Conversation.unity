@@ -462,7 +462,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a50e3140c3ecaaf1c848dbf141cc2074, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  advancedOptions: 0
+  advancedOptions: 1
   remote: 0
   port: 13333
   numThreads: -1
@@ -1401,7 +1401,14 @@ MonoBehaviour:
   _characterBubbleSprite: {fileID: 21300000, guid: 9fc160cc206489c4586ba34701e016f4, type: 3}
   _playerBox: {fileID: 1836522196}
   _playerInput: {fileID: 522655744}
-  _thinkingText: ...
+  _thinkingFrames:
+  - .
+  - ..
+  - ...
+  _thinkingFrameTime: 0.4
+  _firstReplyTimeout: 75
+  _replyTimeout: 25
+  _maxFailuresBeforeEnding: 2
   _lockRoomWhileReplying: 1
   _characterRenderers:
   - {fileID: 325550167}
@@ -1424,6 +1431,9 @@ MonoBehaviour:
   _feedbackText: {fileID: 928922839}
   _feedbackDelay: 2
   _feedbackMinimumTime: 0.75
+  _feedbackAutoSize: 1
+  _feedbackMinFontSize: 18
+  _feedbackMaxFontSize: 32
   _logComfort: 1
 --- !u!4 &839367181
 Transform:
